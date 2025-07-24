@@ -1,5 +1,5 @@
 """
-Combined Validation Service for uwbot
+Combined Validation Service for Underwriting
 
 This service handles combined hardship and budget validation analysis.
 It provides a unified interface for analyzing both hardship and budget data

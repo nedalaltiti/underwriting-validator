@@ -1,5 +1,5 @@
 """
-Error handling utilities for UWBot.
+Error handling utilities for Underwriting.
 
 This module provides standardized error handling with severity levels,
 error codes, and structured error responses.
@@ -48,7 +48,7 @@ class ErrorCode(Enum):
 
 
 class BaseError(Exception):
-    """Base exception class for UWBot with structured error information."""
+    """Base exception class for Underwriting with structured error information."""
     
     def __init__(
         self,

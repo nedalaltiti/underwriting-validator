@@ -81,7 +81,7 @@ def test_app_configuration():
         return False
 
 if __name__ == "__main__":
-    print("🧪 Testing UWBot Validation API Structure")
+    print("🧪 Testing Underwriting Validation API Structure")
     print("=" * 50)
     
     # Test imports

@@ -1,5 +1,5 @@
 """
-Budget Validation Service for uwbot
+Budget Validation Service for Underwriting
 
 Uses database queries to analyze budget data and determine if a client has a positive surplus.
 """

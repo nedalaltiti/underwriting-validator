@@ -1,5 +1,5 @@
 """
-Hardship Validation Service for uwbot
+Hardship Validation Service for Underwriting
 
 Uses Gemini model to analyze financial hardship data and determine validity.
 """

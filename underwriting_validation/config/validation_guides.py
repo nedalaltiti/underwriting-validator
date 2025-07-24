@@ -1,5 +1,5 @@
 """
-Validation Guides for uwbot
+Validation Guides for Underwriting
 
 This module contains prompt templates and validation guides for different types of analysis.
 Separates prompt authoring from service orchestration for better maintainability.

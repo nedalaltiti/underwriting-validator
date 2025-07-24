@@ -1,5 +1,5 @@
 """
-Validation Response Formats for uwbot
+Validation Response Formats for Underwriting
 
 This module centralizes all response formatting for validation services:
 - Hardship validation responses

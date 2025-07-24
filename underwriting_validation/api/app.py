@@ -156,7 +156,7 @@ app.include_router(admin.router,  prefix="/api/admin", tags=["admin"])
 app.include_router(debug.router, prefix="/api/debug", tags=["debug"])
 
 @app.exception_handler(BaseError)
-async def uwbot_error_handler(_: Request, exc: BaseError) -> JSONResponse:
+async def Underwriting_error_handler(_: Request, exc: BaseError) -> JSONResponse:
     """Return structured JSON for domain errors; fall back to FastAPI default
     for everything else.
     """

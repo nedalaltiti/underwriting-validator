@@ -18,7 +18,7 @@ except ImportError:
     DOTENV_LOADED = False
 
 # Configure logging
-logger = logging.getLogger("uwbot.config")
+logger = logging.getLogger("Underwriting.config")
 
 # Type variable for generic type hints
 T = TypeVar('T')

@@ -1,5 +1,5 @@
 """
-Admin router for managing the UWBot.
+Admin router for managing the Underwriting.
 
 This module provides endpoints for:
 1. System diagnostics

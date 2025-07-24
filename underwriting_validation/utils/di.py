@@ -16,7 +16,7 @@ Dependency-provider helpers for FastAPI.
 Each object is created lazily once per process and can be overridden
 in tests with FastAPI's dependency-override mechanism.
 
-UWBot is focused on validation only.
+Underwriting is focused on validation only.
 """
 
 @lru_cache

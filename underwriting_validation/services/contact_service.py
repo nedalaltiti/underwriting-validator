@@ -1,5 +1,5 @@
 """
-Contact Service for uwbot
+Contact Service for Underwriting
 
 Handles database operations for the public.contacts table.
 Allows users to query contact information by ID.

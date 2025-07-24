@@ -1,10 +1,10 @@
-# UWBot Validation API
+# Underwriting Validation API
 
 A pure API service for contact validation, providing hardship and budget analysis capabilities.
 
 ## Overview
 
-UWBot Validation API is a FastAPI-based service that provides contact validation functionality without any Teams or feedback-related components. It focuses purely on:
+Underwriting Validation API is a FastAPI-based service that provides contact validation functionality without any Teams or feedback-related components. It focuses purely on:
 
 - Contact hardship validation
 - Budget analysis
@@ -26,7 +26,7 @@ UWBot Validation API is a FastAPI-based service that provides contact validation
 
 - `POST /api/validation/contact` - Validate a contact for hardship and/or budget information
 - `POST /api/validation/combined` - Perform combined hardship and budget validation
-- `GET /api/validation/contact/{contact_id}` - Get basic contact information
+- `GET /api/validation/contact/{contact_id}` - Get basic contact information without validating
 
 ### Health Endpoints
 
@@ -65,7 +65,7 @@ The service uses environment variables for configuration:
 - `GEMINI_TEMPERATURE` - Gemini temperature setting (default: 0.0)
 
 ### Application Configuration
-- `APP_NAME` - Application name (default: "UWBot Validation API")
+- `APP_NAME` - Application name (default: "Underwriting Validation API")
 - `HOST` - Host to bind to (default: 0.0.0.0)
 - `PORT` - Port to bind to (default: 3978)
 - `DEBUG` - Enable debug mode (default: false)
@@ -82,12 +82,12 @@ The service uses environment variables for configuration:
 
 ### Development
 ```bash
-python -m uwbot.api
+python -m Underwriting.api
 ```
 
 ### Production
 ```bash
-uvicorn uwbot.api.app:app --host 0.0.0.0 --port 3978
+uvicorn Underwriting.api.app:app --host 0.0.0.0 --port 3978
 ```
 
 ## API Documentation
