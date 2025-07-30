@@ -16,9 +16,24 @@ from underwriting_validation.services.gemini_service import GeminiService
 from underwriting_validation.utils.result import Result, Success, Error
 from underwriting_validation.config.settings import settings
 from underwriting_validation.config.validation_guides import format_hardship_prompt
+from underwriting_validation.utils.pii_filter import mask_contact_id
 
 logger = logging.getLogger(__name__)
 
+
+def sanitize_for_prompt(text: str) -> str:
+    """Sanitize user input for LLM prompts."""
+    # Handle None values
+    if text is None:
+        return ""
+    
+    # Convert to string if needed
+    text_str = str(text)
+    
+    # Remove potential injection patterns
+    sanitized = text_str.replace("{", "{{").replace("}", "}}")
+    # Limit length
+    return sanitized[:1000]
 
 class HardshipValidity(Enum):
     """Enum for hardship validation results."""
@@ -79,12 +94,12 @@ class HardshipValidationService:
                     reason="No hardship data available for analysis"
                 ))
 
-            # Build the analysis prompt using validation guides
+            # Build the analysis prompt using validation guides with sanitized input
             contact_id = hardship_data.get('contact_id', 'Unknown')
             prompt = format_hardship_prompt(
-                contact_id=contact_id,
-                financial_hardship=financial_hardship,
-                hardship_description=hardship_description
+                contact_id=str(contact_id),
+                financial_hardship=sanitize_for_prompt(financial_hardship),
+                hardship_description=sanitize_for_prompt(hardship_description)
             )
             
             # Get AI analysis with proper rate limiting and timeout
@@ -97,7 +112,9 @@ class HardshipValidationService:
             # Parse the AI response
             analysis = self._parse_hardship_analysis(result.value, hardship_data)
             
-            logger.info(f"Hardship analysis completed for contact {hardship_data.get('contact_id')}: {analysis.result.value}")
+            contact_id = hardship_data.get('contact_id')
+            masked_id = mask_contact_id(contact_id) if contact_id else 'Unknown'
+            logger.info(f"Hardship analysis completed for contact {masked_id}: {analysis.result.value}")
             return Success(analysis)
             
         except asyncio.TimeoutError:

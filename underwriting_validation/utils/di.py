@@ -102,30 +102,7 @@ async def get_combined_validation_uc(
     return CombinedValidationService(hardship_service, budget_service, repo)
 
 
-@lru_cache
-def get_contact_service() -> ContactService:
-    """
-    Return a shared ContactService for contact database operations.
-    
-    This is a legacy method that creates its own session.
-    New code should use get_contact_service_with_session() with proper dependency injection.
-    """
-    hardship_service = get_hardship_service()
-    # Note: This will be updated to use dependency injection with session
-    from underwriting_validation.db.session import get_db_session_context
-    import asyncio
-    
-    # For now, create a temporary session for the repository
-    # This will be replaced with proper dependency injection
-    async def create_service():
-        async with get_db_session_context() as session:
-            from underwriting_validation.infrastructure.contact_repository import ContactRepository
-            repository = ContactRepository(session)
-            return ContactService(hardship_service, repository)
-    
-    # This is a temporary solution - in the real implementation,
-    # the session should be injected via FastAPI dependencies
-    return asyncio.run(create_service())
+
 
 
 

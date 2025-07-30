@@ -11,6 +11,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from underwriting_validation.utils.result import Result, Success, Error
+from underwriting_validation.utils.pii_filter import mask_contact_id
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,8 @@ class BudgetValidationService:
                 surplus=surplus
             )
             
-            logger.info(f"Budget analysis completed for contact {budget_data.contact_id}: {analysis.result.value}")
+            masked_id = mask_contact_id(budget_data.contact_id)
+            logger.info(f"Budget analysis completed for contact {masked_id}: {analysis.result.value}")
             return Success(analysis)
             
         except Exception as e:

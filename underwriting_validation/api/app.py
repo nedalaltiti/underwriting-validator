@@ -21,13 +21,20 @@ from underwriting_validation.api.routers import admin, health, debug, validation
 from underwriting_validation.config.settings import settings
 from underwriting_validation.utils.error import BaseError, ErrorSeverity
 from underwriting_validation.services.gemini_service import GeminiService
-
 from underwriting_validation.services.contact_service import InvalidContactIDError, ContactNotFoundError
+from underwriting_validation.utils.pii_filter import setup_pii_filtering
+from underwriting_validation.utils.rate_limiter import get_rate_limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 logging.basicConfig(
     level=logging.INFO if not settings.debug else logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+
+# Set up PII filtering for all loggers
+setup_pii_filtering()
+
 logger = logging.getLogger("underwritting_validation.app")
 
 # Store temporary credentials path for cleanup
@@ -140,6 +147,11 @@ app = FastAPI(
     lifespan=lifespan,
     redirect_slashes=False,
 )
+
+# Add rate limiter middleware
+limiter = get_rate_limiter()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 if settings.cors_origins:   # don't enable CORS unless explicitly configured
     app.add_middleware(

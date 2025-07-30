@@ -12,6 +12,7 @@ from underwriting_validation.infrastructure.contact_repository import ContactRep
 from underwriting_validation.services.hardship_validation_service import HardshipValidationService
 from underwriting_validation.services.budget_validation_service import BudgetValidationService, BudgetDataIn
 from underwriting_validation.config.settings import settings
+from underwriting_validation.utils.pii_filter import mask_contact_id
 
 class InvalidContactIDError(ValueError):
     """Raised when a contact ID is invalid or out of range."""
@@ -79,12 +80,13 @@ class ContactService:
             Hardship data dictionary or None if not found
         """
         # Check cache first
+        masked_id = mask_contact_id(contact_id)
         if contact_id in self._hardship_cache:
-            logger.debug(f"Using cached hardship data for contact {contact_id}")
+            logger.debug(f"Using cached hardship data for contact {masked_id}")
             return self._hardship_cache[contact_id]
         
         # Fetch from database
-        logger.debug(f"Fetching hardship data for contact {contact_id} from database")
+        logger.debug(f"Fetching hardship data for contact {masked_id} from database")
         data = await self.repository.fetch_contact_with_hardship_data(contact_id)
         
         # Cache the result (even if None, to avoid repeated DB calls)
@@ -109,8 +111,9 @@ class ContactService:
             # Get hardship data using cached fetch
             hardship_data = await self._get_or_fetch_hardship(contact_id)
             
+            masked_id = mask_contact_id(contact_id)
             if not hardship_data:
-                logger.warning(f"Contact {contact_id} not found in database")
+                logger.warning(f"Contact {masked_id} not found in database")
                 raise ContactNotFoundError(f"Contact {contact_id} not found in database")
             
             # Check if there's any hardship data to analyze
@@ -119,8 +122,9 @@ class ContactService:
                 hardship_data.get('hardship_description')
             ])
             
+            masked_id = mask_contact_id(contact_id)
             if not has_hardship_data:
-                logger.info(f"No hardship data available for contact {contact_id}")
+                logger.info(f"No hardship data available for contact {masked_id}")
                 from underwriting_validation.utils.validation_responses import format_no_data_response
                 return {
                     "contact_id": contact_id,
@@ -135,8 +139,9 @@ class ContactService:
             # Analyze hardship validity
             analysis_result = await self.hardship_service.analyze_hardship_validity(hardship_data)
             
+            masked_id = mask_contact_id(contact_id)
             if analysis_result.is_error():
-                logger.error(f"Hardship analysis failed for contact {contact_id}: {analysis_result.error}")
+                logger.error(f"Hardship analysis failed for contact {masked_id}: {analysis_result.error}")
                 from underwriting_validation.utils.validation_responses import format_error_response
                 return {
                     "contact_id": contact_id,
@@ -163,7 +168,8 @@ class ContactService:
             # Re-raise these specific exceptions
             raise
         except Exception as e:
-            logger.error(f"Error analyzing hardship for contact {contact_id}: {e}")
+            masked_id = mask_contact_id(contact_id)
+            logger.error(f"Error analyzing hardship for contact {masked_id}: {e}")
             from underwriting_validation.utils.validation_responses import format_error_response
             return {
                 "contact_id": contact_id,
@@ -192,7 +198,8 @@ class ContactService:
                 raise ContactNotFoundError(f"Contact {contact_id} not found in database")
             return data
         except Exception as e:
-            logger.error(f"Error retrieving contact budget data for {contact_id}: {e}")
+            masked_id = mask_contact_id(contact_id)
+            logger.error(f"Error retrieving contact budget data for {masked_id}: {e}")
             raise ContactNotFoundError(f"Contact {contact_id} not found in database")
     
     async def get_contact_budget_analysis(self, contact_id: int) -> Optional[Dict[str, Any]]:
@@ -213,8 +220,9 @@ class ContactService:
             # Get budget data
             budget_data = await self.get_contact_with_budget_data(contact_id)
             
+            masked_id = mask_contact_id(contact_id)
             if not budget_data:
-                logger.warning(f"Contact {contact_id} not found in database")
+                logger.warning(f"Contact {masked_id} not found in database")
                 raise ContactNotFoundError(f"Contact {contact_id} not found in database")
             
             # Check if there's any budget data to analyze
@@ -223,8 +231,9 @@ class ContactService:
                 budget_data.get('total_expenses', 0) > 0
             ])
             
+            masked_id = mask_contact_id(contact_id)
             if not has_budget_data:
-                logger.info(f"No budget data available for contact {contact_id}")
+                logger.info(f"No budget data available for contact {masked_id}")
                 from underwriting_validation.utils.validation_responses import format_no_data_response
                 return {
                     "contact_id": contact_id,
@@ -245,8 +254,9 @@ class ContactService:
             # Analyze budget validity
             analysis_result = await self.budget_service.analyze_budget_validity(budget_data_model)
             
+            masked_id = mask_contact_id(contact_id)
             if analysis_result.is_error():
-                logger.error(f"Budget analysis failed for contact {contact_id}: {analysis_result.error}")
+                logger.error(f"Budget analysis failed for contact {masked_id}: {analysis_result.error}")
                 from underwriting_validation.utils.validation_responses import format_error_response
                 return {
                     "contact_id": contact_id,
@@ -275,7 +285,8 @@ class ContactService:
             # Re-raise these specific exceptions
             raise
         except Exception as e:
-            logger.error(f"Error analyzing budget for contact {contact_id}: {e}")
+            masked_id = mask_contact_id(contact_id)
+            logger.error(f"Error analyzing budget for contact {masked_id}: {e}")
             from underwriting_validation.utils.validation_responses import format_error_response
             return {
                 "contact_id": contact_id,
@@ -304,7 +315,8 @@ class ContactService:
                 raise ContactNotFoundError(f"Contact {contact_id} not found in database")
             return data
         except Exception as e:
-            logger.error(f"Error retrieving contact hardship data for {contact_id}: {e}")
+            masked_id = mask_contact_id(contact_id)
+            logger.error(f"Error retrieving contact hardship data for {masked_id}: {e}")
             raise ContactNotFoundError(f"Contact {contact_id} not found in database")
     
 

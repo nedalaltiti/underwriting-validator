@@ -117,49 +117,48 @@ class ContactRepository:
         return None
     
     async def fetch_contact_with_hardship_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
-        """Fetch contact with hardship data using separate queries."""
-        # First, get the base contact information
-        contact = await self.fetch_contact(contact_id)
-        if not contact:
-            return None
-        
-        # Get hardship data using separate queries
-        financial_hardship_stmt = (
-            select(ContactUserField.f_string)
-            .where(
-                and_(
-                    ContactUserField.contact_id == bindparam('contact_id'),
-                    ContactUserField.custom_id == self.financial_hardship_id
-                )
+        """Fetch contact with hardship data using a single query."""
+        stmt = (
+            select(
+                Contact.id,
+                Contact.acctid,
+                Contact.del_,
+                Contact.iscoapp,
+                Contact.c_type,
+                Contact.leadstatus,
+                func.max(case(
+                    (ContactUserField.custom_id == self.financial_hardship_id, 
+                     ContactUserField.f_string)
+                )).label('financial_hardship'),
+                func.max(case(
+                    (ContactUserField.custom_id == self.hardship_description_id, 
+                     ContactUserField.f_string)
+                )).label('hardship_description')
             )
-            .limit(1)
+            .outerjoin(ContactUserField, Contact.id == ContactUserField.contact_id)
+            .where(Contact.id == contact_id)
+            .group_by(
+                Contact.id,
+                Contact.acctid,
+                Contact.del_,
+                Contact.iscoapp,
+                Contact.c_type,
+                Contact.leadstatus
+            )
         )
         
-        hardship_description_stmt = (
-            select(ContactUserField.f_string)
-            .where(
-                and_(
-                    ContactUserField.contact_id == bindparam('contact_id'),
-                    ContactUserField.custom_id == self.hardship_description_id
-                )
-            )
-            .limit(1)
-        )
+        result = await self.session.execute(stmt)
+        row = result.fetchone()
         
-        # Execute both queries
-        financial_result = await self.session.execute(financial_hardship_stmt, {"contact_id": contact_id})
-        description_result = await self.session.execute(hardship_description_stmt, {"contact_id": contact_id})
-        
-        financial_hardship = financial_result.scalar_one_or_none()
-        hardship_description = description_result.scalar_one_or_none()
-        
-        return {
-            "contact_id": contact.id,
-            "acctid": contact.acctid,
-            "del": contact.del_,
-            "iscoapp": contact.iscoapp,
-            "c_type": contact.c_type,
-            "leadstatus": contact.leadstatus,
-            "financial_hardship": financial_hardship,
-            "hardship_description": hardship_description,
-        } 
+        if row:
+            return {
+                "contact_id": row.id,
+                "acctid": row.acctid,
+                "del": row.del_,
+                "iscoapp": row.iscoapp,
+                "c_type": row.c_type,
+                "leadstatus": row.leadstatus,
+                "financial_hardship": row.financial_hardship,
+                "hardship_description": row.hardship_description,
+            }
+        return None 

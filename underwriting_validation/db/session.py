@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # DEBUG: Log what database configuration is being used at import time
 logger.info(f"=== DATABASE ENGINE CREATION DEBUG ===")
-logger.info(f"Database URL being used: {settings.db.url}")
+logger.info(f"Database URL being used: {settings.db.get_sanitized_url()}")
 logger.info(f"Database host: {settings.db.host}")
 logger.info(f"Database port: {settings.db.port}")
 logger.info(f"Database name: {settings.db.name}")

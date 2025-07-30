@@ -7,6 +7,7 @@ from datetime import datetime
 from underwriting_validation.utils.di import get_contact_validation_uc
 from underwriting_validation.services.contact_service import InvalidContactIDError, ContactNotFoundError
 from underwriting_validation.config.settings import settings
+from underwriting_validation.utils.rate_limiter import RateLimiter
 
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,10 @@ class ContactQueryResponse(BaseModel):
     success: bool
     processing_time: float
 
-@router.post("/contact", response_model=ContactQueryResponse)
+@router.post("/contact", 
+    response_model=ContactQueryResponse,
+    dependencies=[Depends(RateLimiter(times=5, seconds=60))]  # 5 requests/minute
+)
 async def debug_contact_query(
     req: ContactQueryRequest,
     contact_service = Depends(get_contact_validation_uc)

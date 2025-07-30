@@ -33,6 +33,12 @@ class DatabaseSettings:
             f"postgresql+asyncpg://{creds}@{self.host}:{self.port}/{self.name}"
         )
 
+    def get_sanitized_url(self) -> str:
+        """Get database URL with password masked."""
+        if self.password:
+            return self.url.replace(self.password, "***")
+        return self.url
+
     @property
     def engine_kwargs(self) -> dict:
         return dict(
@@ -83,7 +89,7 @@ class DatabaseSettings:
                 )
                 
                 logger.info(f"✅ AWS Database config: host={result.host}, port={result.port}, database={result.name}")
-                logger.info(f"Database URL: {result.url}")
+                logger.info(f"Database URL: {result.get_sanitized_url()}")
                 return result
                 
             except Exception as e:
@@ -110,7 +116,7 @@ class DatabaseSettings:
                         pool_recycle=get_env_var_int("DB_POOL_RECYCLE", 1800),
                     )
                     
-                    logger.error(f"Using dummy config: {result.url}")
+                    logger.error(f"Using dummy config: {result.get_sanitized_url()}")
                     return result
                 
                 logger.info("Falling back to environment variables for database configuration")
@@ -145,7 +151,7 @@ class DatabaseSettings:
                 pool_timeout=get_env_var_int("DB_POOL_TIMEOUT", 30),
                 pool_recycle=get_env_var_int("DB_POOL_RECYCLE", 1800),
             )
-            logger.info(f"Skip DB config: {result.url}")
+            logger.info(f"Skip DB config: {result.get_sanitized_url()}")
             return result
         
         # Default: Use environment variables with validation
@@ -171,7 +177,7 @@ class DatabaseSettings:
                     pool_timeout=get_env_var_int("DB_POOL_TIMEOUT", 30),
                     pool_recycle=get_env_var_int("DB_POOL_RECYCLE", 1800),
                 )
-                logger.warning(f"Placeholder config: {result.url}")
+                logger.warning(f"Placeholder config: {result.get_sanitized_url()}")
                 return result
             
         result = cls(
@@ -188,7 +194,7 @@ class DatabaseSettings:
         )
         
         logger.info(f"✅ Environment variable config: host={result.host}, port={result.port}, database={result.name}")
-        logger.info(f"Database URL: {result.url}")
+        logger.info(f"Database URL: {result.get_sanitized_url()}")
         return result
     
 @dataclass(frozen=True)

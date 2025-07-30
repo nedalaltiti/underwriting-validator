@@ -6,12 +6,14 @@ removing all Teams and feedback-related functionality.
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from underwriting_validation.utils.di import get_contact_validation_uc, get_combined_validation_uc
 from underwriting_validation.services.contact_service import ContactService, InvalidContactIDError, ContactNotFoundError
 from underwriting_validation.services.combined_validation_service import CombinedValidationService
+from underwriting_validation.utils.pii_filter import mask_contact_id
+from underwriting_validation.utils.rate_limiter import RateLimiter, limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -46,8 +48,12 @@ class CombinedValidationResponse(BaseModel):
     combined_result: Optional[str] = None
     error: Optional[str] = None
 
-@router.post("/contact", response_model=ContactValidationResponse)
+@router.post("/contact", 
+    response_model=ContactValidationResponse
+)
+@limiter.limit("5/60s")
 async def validate_contact(
+    request: Request,
     req: ContactValidationRequest,
     contact_service: ContactService = Depends(get_contact_validation_uc)
 ):
@@ -57,7 +63,8 @@ async def validate_contact(
     This endpoint provides a robust validation of a contact's hardship and budget data.
     """
     try:
-        logger.info(f"Validating contact {req.contact_id}")
+        masked_id = mask_contact_id(req.contact_id)
+        logger.info(f"Validating contact {masked_id}")
         
         # Contact ID validation is handled by the service methods
         # They will raise InvalidContactIDError or ContactNotFoundError as appropriate
@@ -117,7 +124,8 @@ async def validate_contact(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error validating contact {req.contact_id}: {e}")
+        masked_id = mask_contact_id(req.contact_id)
+        logger.error(f"Error validating contact {masked_id}: {e}")
         return ContactValidationResponse(
             contact_id=req.contact_id,
             success=False,
@@ -126,8 +134,12 @@ async def validate_contact(
             error=str(e)
         )
 
-@router.post("/combined", response_model=CombinedValidationResponse)
+@router.post("/combined", 
+    response_model=CombinedValidationResponse
+)
+@limiter.limit("5/60s")
 async def validate_contact_combined(
+    request: Request,
     req: CombinedValidationRequest,
     combined_service: CombinedValidationService = Depends(get_combined_validation_uc)
 ):
@@ -138,7 +150,8 @@ async def validate_contact_combined(
     and budget analysis in a single request.
     """
     try:
-        logger.info(f"Performing combined validation for contact {req.contact_id}")
+        masked_id = mask_contact_id(req.contact_id)
+        logger.info(f"Performing combined validation for contact {masked_id}")
         
         # Perform combined validation
         result = await combined_service.perform_combined_validation(req.contact_id)
@@ -164,7 +177,8 @@ async def validate_contact_combined(
         )
         
     except Exception as e:
-        logger.error(f"Error performing combined validation for contact {req.contact_id}: {e}")
+        masked_id = mask_contact_id(req.contact_id)
+        logger.error(f"Error performing combined validation for contact {masked_id}: {e}")
         return CombinedValidationResponse(
             contact_id=req.contact_id,
             success=False,
@@ -187,7 +201,8 @@ async def get_contact_info(
     data are available for a contact, without performing validation analysis.
     """
     try:
-        logger.info(f"Getting contact info for {contact_id}")
+        masked_id = mask_contact_id(contact_id)
+        logger.info(f"Getting contact info for {masked_id}")
         
         # Contact ID validation is handled by the service methods
         # They will raise InvalidContactIDError or ContactNotFoundError as appropriate
@@ -229,7 +244,8 @@ async def get_contact_info(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting contact info for {contact_id}: {e}")
+        masked_id = mask_contact_id(contact_id)
+        logger.error(f"Error getting contact info for {masked_id}: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"An error occurred while retrieving contact information: {str(e)}"
