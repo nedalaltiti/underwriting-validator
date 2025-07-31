@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # Main application service - Production
+  underwriting-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3978:3978"
+    environment:
+      # Application settings
+      - DEBUG=false
+      - HOST=0.0.0.0
+      - PORT=3978
+      
+      # Database settings (required)
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      
+      # Google API settings
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_MODEL_NAME=${GEMINI_MODEL_NAME:-gemini-2.0-flash-001}
+      - GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE:-0.0}
+      
+      # Field configuration
+      - HARDSHIP_FINANCIAL_ID=${HARDSHIP_FINANCIAL_ID}
+      - HARDSHIP_DESCRIPTION_ID=${HARDSHIP_DESCRIPTION_ID}
+      - BUDGET_ACCTID=${BUDGET_ACCTID}
+      - BUDGET_C_TYPE=${BUDGET_C_TYPE}
+      - BUDGET_ISCOAPP=${BUDGET_ISCOAPP}
+      - BUDGET_LEADSTATUS=${BUDGET_LEADSTATUS}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3978/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    name: underwriting-production

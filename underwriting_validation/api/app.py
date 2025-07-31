@@ -94,7 +94,6 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     # Store temporary credentials path for cleanup
     if settings.gemini.use_aws_secrets and settings.gemini.credentials_path:
         _temp_credentials_path = settings.gemini.credentials_path
-        logger.info("Using AWS Secrets Manager for Gemini credentials")
 
     # Initialize LLM service in background to reduce first-request latency
     asyncio.create_task(_warmup_services())
@@ -106,15 +105,6 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         yield
     finally:
         logger.info("👋  Shutting down...")
-        
-        # Clean up temporary credentials if using AWS Secrets Manager
-        if _temp_credentials_path:
-            try:
-                from underwriting_validation.utils.secret_manager import cleanup_temp_credentials
-                cleanup_temp_credentials(_temp_credentials_path)
-                logger.info("Cleaned up temporary AWS credentials")
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temporary credentials: {e}")
         
         # Clean up database connections
         try:

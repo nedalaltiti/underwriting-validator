@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Main application service
+  underwriting-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3978:3978"
+    environment:
+      # Application settings
+      - DEBUG=true
+      - HOST=0.0.0.0
+      - PORT=3978
+      
+      # Database settings (connect to local postgres)
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=underwriting_db
+      - DB_USER=underwriting_user
+      - DB_PASSWORD=underwriting_pass
+      
+      # Google API (you'll need to set this)
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-your_google_api_key_here}
+      - GEMINI_MODEL_NAME=gemini-2.0-flash-001
+      - GEMINI_TEMPERATURE=0.0
+      
+      # Field configuration (set these as needed)
+      - HARDSHIP_FINANCIAL_ID=${HARDSHIP_FINANCIAL_ID:-1}
+      - HARDSHIP_DESCRIPTION_ID=${HARDSHIP_DESCRIPTION_ID:-2}
+      - BUDGET_ACCTID=${BUDGET_ACCTID:-3}
+      - BUDGET_C_TYPE=${BUDGET_C_TYPE:-4}
+      - BUDGET_ISCOAPP=${BUDGET_ISCOAPP:-5}
+      - BUDGET_LEADSTATUS=${BUDGET_LEADSTATUS:-6}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount source code for development (hot reload)
+      - .:/app:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3978/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=underwriting_db
+      - POSTGRES_USER=underwriting_user
+      - POSTGRES_PASSWORD=underwriting_pass
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U underwriting_user -d underwriting_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: underwriting-network

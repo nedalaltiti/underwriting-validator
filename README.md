@@ -16,7 +16,6 @@ Underwriting Validation API is a FastAPI-based service that provides contact val
 - **Contact Validation**: Validate contacts for hardship and budget information
 - **Combined Analysis**: Perform comprehensive validation combining both hardship and budget analysis
 - **Database Integration**: PostgreSQL database integration for contact data
-- **AWS Integration**: Optional AWS Secrets Manager integration for credentials
 - **Gemini AI**: Google Gemini integration for AI-powered analysis
 - **Health Monitoring**: Comprehensive health and diagnostic endpoints
 
@@ -52,12 +51,6 @@ The service uses environment variables for configuration:
 - `DB_PASSWORD` - Database password
 - `DB_HOST` - Database host
 - `DB_PORT` - Database port (default: 5432)
-
-### AWS Configuration (Optional)
-- `USE_AWS_SECRETS` - Enable AWS Secrets Manager (default: true)
-- `AWS_REGION` - AWS region (default: us-west-1)
-- `AWS_DB_SECRET_NAME` - Database credentials secret name
-- `AWS_GEMINI_SECRET_NAME` - Gemini credentials secret name
 
 ### Gemini Configuration
 - `GOOGLE_API_KEY` - Google API key for Gemini
@@ -125,7 +118,7 @@ The service follows a clean architecture pattern:
 - **API Layer**: FastAPI routers and endpoints
 - **Service Layer**: Business logic for validation
 - **Repository Layer**: Data access and database operations
-- **Infrastructure Layer**: External service integrations (AWS, Gemini)
+- **Infrastructure Layer**: External service integrations (Gemini)
 
 ## Dependencies
 
@@ -133,7 +126,6 @@ The service follows a clean architecture pattern:
 - SQLAlchemy - Database ORM
 - asyncpg - PostgreSQL async driver
 - Google Generative AI - Gemini integration
-- boto3 - AWS SDK (optional)
 - Pydantic - Data validation
 
 ## License

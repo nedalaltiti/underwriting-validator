@@ -5,8 +5,6 @@ from underwriting_validation.config.environment import (
     get_env_var, get_env_var_bool, get_env_var_float, get_env_var_int, get_env_var_list
 )
 
-
-
 logger = logging.getLogger("underwriting_validation.config")
 
 @dataclass(frozen=True)
@@ -50,78 +48,6 @@ class DatabaseSettings:
     
     @classmethod
     def from_environment(cls) -> "DatabaseSettings":
-        import os
-        
-        # Check if database initialization should be skipped
-        skip_db_init = os.environ.get("SKIP_DB_INIT", "").lower() in ("true", "1", "yes")
-        
-        # Prefer AWS Secrets Manager unless the caller explicitly disables it
-        use_aws_secrets = get_env_var_bool("USE_AWS_SECRETS", True)
-        
-        # Enhanced debugging
-        logger.info(f"=== DATABASE CONFIGURATION DEBUG ===")
-        logger.info(f"SKIP_DB_INIT: {skip_db_init}")
-        logger.info(f"USE_AWS_SECRETS: {use_aws_secrets}")
-        logger.info(f"AWS_DB_SECRET_NAME: {os.environ.get('AWS_DB_SECRET_NAME', 'NOT_SET')}")
-        
-        if use_aws_secrets and not skip_db_init:
-            try:
-                from underwriting_validation.utils.secret_manager import get_database_credentials, get_aws_region
-                
-                # Get AWS configuration
-                region = get_aws_region()
-                secret_name = get_env_var("AWS_DB_SECRET_NAME", "chatbot-clarity-db-dev-postgres")
-                
-                logger.info(f"Attempting to load database credentials from AWS Secrets Manager: {secret_name}")
-                db_creds = get_database_credentials(secret_name, region)
-                
-                result = cls(
-                    name=db_creds["database"],
-                    user=db_creds["username"],
-                    password=db_creds["password"],
-                    host=db_creds["host"],
-                    port=int(db_creds["port"]),
-                    sslmode=db_creds.get("sslmode", "disable"),  # Default to disable if not present
-                    pool_size=get_env_var_int("DB_POOL_SIZE", 5),
-                    max_overflow=get_env_var_int("DB_MAX_OVERFLOW", 10),
-                    pool_timeout=get_env_var_int("DB_POOL_TIMEOUT", 30),
-                    pool_recycle=get_env_var_int("DB_POOL_RECYCLE", 1800),
-                )
-                
-                logger.info(f"✅ AWS Database config: host={result.host}, port={result.port}, database={result.name}")
-                logger.info(f"Database URL: {result.get_sanitized_url()}")
-                return result
-                
-            except Exception as e:
-                logger.error(f"❌ Failed to load database credentials from AWS Secrets Manager: {e}")
-                
-                # If USE_AWS_SECRETS=true but AWS fails, we don't want to fall back to local DB
-                # Instead, provide a dummy configuration that will fail gracefully at runtime
-                if use_aws_secrets:
-                    logger.error("AWS Secrets Manager is enabled but failed. Application will not start.")
-                    logger.error("Please check your AWS credentials and network connectivity.")
-                    logger.error("To use local database instead, set USE_AWS_SECRETS=false")
-                    
-                    # Return dummy configuration that will cause a clear error at runtime
-                    result = cls(
-                        name="aws_rds_unavailable",
-                        user="aws_rds_unavailable", 
-                        password="aws_rds_unavailable",
-                        host="aws_rds_unavailable",
-                        port=5432,
-                        sslmode="disable",
-                        pool_size=get_env_var_int("DB_POOL_SIZE", 5),
-                        max_overflow=get_env_var_int("DB_MAX_OVERFLOW", 10),
-                        pool_timeout=get_env_var_int("DB_POOL_TIMEOUT", 30),
-                        pool_recycle=get_env_var_int("DB_POOL_RECYCLE", 1800),
-                    )
-                    
-                    logger.error(f"Using dummy config: {result.get_sanitized_url()}")
-                    return result
-                
-                logger.info("Falling back to environment variables for database configuration")
-                # Fall through to environment variable method only if USE_AWS_SECRETS=false
-        
         # Get database settings from environment variables
         db_name = get_env_var("DB_NAME") 
         db_user = get_env_var("DB_USER")
@@ -129,56 +55,17 @@ class DatabaseSettings:
         db_host = get_env_var("DB_HOST")
         
         # Enhanced environment variable debugging
-        logger.info(f"=== ENVIRONMENT VARIABLE FALLBACK ===")
+        logger.info(f"=== DATABASE CONFIGURATION ===")
         logger.info(f"DB_NAME: {db_name or 'NOT_SET'}")
         logger.info(f"DB_USER: {db_user or 'NOT_SET'}")
         logger.info(f"DB_PASSWORD: {'SET' if db_password else 'NOT_SET'}")
         logger.info(f"DB_HOST: {db_host or 'NOT_SET'}")
-        logger.info(f"DB_PORT: {os.environ.get('DB_PORT', 'NOT_SET')}")
         
-        # Provide safe fallbacks when database initialization is skipped
-        if skip_db_init:
-            logger.info("SKIP_DB_INIT=true - using dummy database configuration")
-            result = cls(
-                name=db_name or "dummy",
-                user=db_user or "dummy",
-                password=db_password or "dummy",
-                host=db_host or "localhost",  # Use localhost to avoid DNS issues
-                port=get_env_var_int("DB_PORT", 5432),
-                sslmode=get_env_var("DB_SSLMODE", "disable"),
-                pool_size=get_env_var_int("DB_POOL_SIZE", 5),
-                max_overflow=get_env_var_int("DB_MAX_OVERFLOW", 10),
-                pool_timeout=get_env_var_int("DB_POOL_TIMEOUT", 30),
-                pool_recycle=get_env_var_int("DB_POOL_RECYCLE", 1800),
-            )
-            logger.info(f"Skip DB config: {result.get_sanitized_url()}")
-            return result
-        
-        # Default: Use environment variables with validation
+        # Validate required environment variables
         if not all([db_name, db_user, db_password, db_host]):
             missing = [name for name, val in [("DB_NAME", db_name), ("DB_USER", db_user), 
                                             ("DB_PASSWORD", db_password), ("DB_HOST", db_host)] if not val]
-            
-            # Only require local DB variables if USE_AWS_SECRETS=false
-            if not use_aws_secrets:
-                raise ValueError(f"Missing required database environment variables: {missing}")
-            else:
-                # If AWS is enabled but failed, and no local variables, return dummy config
-                logger.warning("AWS Secrets Manager failed and no local DB variables provided")
-                result = cls(
-                    name="placeholder",
-                    user="placeholder",
-                    password="placeholder", 
-                    host="placeholder",
-                    port=5432,
-                    sslmode="disable",
-                    pool_size=get_env_var_int("DB_POOL_SIZE", 5),
-                    max_overflow=get_env_var_int("DB_MAX_OVERFLOW", 10),
-                    pool_timeout=get_env_var_int("DB_POOL_TIMEOUT", 30),
-                    pool_recycle=get_env_var_int("DB_POOL_RECYCLE", 1800),
-                )
-                logger.warning(f"Placeholder config: {result.get_sanitized_url()}")
-                return result
+            raise ValueError(f"Missing required database environment variables: {missing}")
             
         result = cls(
             name=db_name,
@@ -193,7 +80,7 @@ class DatabaseSettings:
             pool_recycle=get_env_var_int("DB_POOL_RECYCLE", 1800),
         )
         
-        logger.info(f"✅ Environment variable config: host={result.host}, port={result.port}, database={result.name}")
+        logger.info(f"✅ Database config: host={result.host}, port={result.port}, database={result.name}")
         logger.info(f"Database URL: {result.get_sanitized_url()}")
         return result
     
@@ -202,52 +89,19 @@ class GeminiSettings:
     model_name: str = "gemini-2.0-flash-001"
     temperature: float = 0.0
     max_output_tokens: int = 1024
-    api_key: Optional[str] = None  # Prefer explicit API key over default credentials
-    use_aws_secrets: bool = False
-    credentials_path: Optional[str] = None  # Path to temp credentials file
+    api_key: Optional[str] = None
 
     @classmethod
     def from_environment(cls) -> "GeminiSettings":
-        # Prefer AWS Secrets Manager *only* when explicitly enabled AND a secret name is provided
-        use_aws_secrets_global = get_env_var_bool("USE_AWS_SECRETS", True)
-        secret_name = get_env_var("AWS_GEMINI_SECRET_NAME")  # No default – skip if not set
-
-        credentials_path: Optional[str] = None
-
-        if use_aws_secrets_global and secret_name:
-            try:
-                from underwriting_validation.utils.secret_manager import load_gemini_credentials, get_aws_region
-
-                # Get AWS configuration
-                region = get_aws_region()
-
-                logger.info(f"Loading Gemini credentials from AWS Secrets Manager: {secret_name}")
-                credentials_path = load_gemini_credentials(secret_name, region)
-
-                return cls(
-                    model_name=get_env_var("GEMINI_MODEL_NAME", cls.model_name),
-                    temperature=get_env_var_float("GEMINI_TEMPERATURE", cls.temperature),
-                    max_output_tokens=get_env_var_int("GEMINI_MAX_OUTPUT_TOKENS", cls.max_output_tokens),
-                    api_key=None,  # Will use service account from AWS
-                    use_aws_secrets=True,
-                    credentials_path=credentials_path,
-                )
-
-            except Exception as e:
-                logger.error(f"Failed to load Gemini credentials from AWS Secrets Manager: {e}")
-                logger.info("Falling back to environment variables for Gemini configuration")
-                # Fall through to environment variable method
-        elif use_aws_secrets_global and not secret_name:
-            logger.info("AWS_GEMINI_SECRET_NAME not set – skipping Gemini secret retrieval and using env vars/API key if available")
-        
-        # Default: Use environment variables
+        api_key = get_env_var("GOOGLE_API_KEY")
+        if not api_key:
+            logger.warning("GOOGLE_API_KEY not set - Gemini functionality may not work")
+            
         return cls(
             model_name=get_env_var("GEMINI_MODEL_NAME", cls.model_name),
             temperature=get_env_var_float("GEMINI_TEMPERATURE", cls.temperature),
             max_output_tokens=get_env_var_int("GEMINI_MAX_OUTPUT_TOKENS", cls.max_output_tokens),
-            api_key=get_env_var("GOOGLE_API_KEY"),
-            use_aws_secrets=False,
-            credentials_path=None,
+            api_key=api_key,
         )
 
 @dataclass(frozen=True)
@@ -262,22 +116,7 @@ class GoogleCloudSettings:
             location=get_env_var("GOOGLE_CLOUD_LOCATION", cls.location),
         )
 
-@dataclass(frozen=True)
-class AWSSettings:
-    """AWS-specific configuration settings."""
-    use_secrets_manager: bool = False
-    region: str = "us-west-1"
-    db_secret_name: str = "chatbot-clarity-db-dev-postgres"
-    gemini_secret_name: str = "genai-gemini-vertex-prod-api"
-    
-    @classmethod
-    def from_environment(cls) -> "AWSSettings":
-        return cls(
-            use_secrets_manager=get_env_var_bool("USE_AWS_SECRETS", cls.use_secrets_manager),
-            region=get_env_var("AWS_REGION", get_env_var("AWS_DEFAULT_REGION", cls.region)),
-            db_secret_name=get_env_var("AWS_DB_SECRET_NAME", cls.db_secret_name),
-            gemini_secret_name=get_env_var("AWS_GEMINI_SECRET_NAME", cls.gemini_secret_name),
-        )
+
 
 @dataclass(frozen=True)
 class HardshipFieldSettings:
@@ -351,7 +190,6 @@ class AppSettings:
     db: DatabaseSettings = field(default_factory=DatabaseSettings.from_environment)
     gemini: GeminiSettings = field(default_factory=GeminiSettings.from_environment)
     google_cloud: GoogleCloudSettings = field(default_factory=GoogleCloudSettings.from_environment)
-    aws: AWSSettings = field(default_factory=AWSSettings.from_environment)
     hardship_fields: HardshipFieldSettings = field(default_factory=HardshipFieldSettings.from_environment)
     budget_fields: BudgetFieldSettings = field(default_factory=BudgetFieldSettings.from_environment)
 
@@ -377,7 +215,7 @@ class AppSettings:
         return cls(
             db=DatabaseSettings.from_environment(),
             gemini=GeminiSettings.from_environment(),
-            aws=AWSSettings.from_environment(),
+            google_cloud=GoogleCloudSettings.from_environment(),
             hardship_fields=hardship_fields,
             budget_fields=budget_fields,
             app_name=get_env_var("APP_NAME", cls.app_name),
@@ -390,11 +228,9 @@ class AppSettings:
         
 try:
     settings = AppSettings.from_environment()
-    logger.info(f"Config loaded for env='{settings.app_name}'")
-    if settings.aws.use_secrets_manager:
-        logger.info("AWS Secrets Manager integration enabled")
-    if settings.gemini.use_aws_secrets:
-        logger.info("Gemini credentials loaded from AWS Secrets Manager")
+    logger.info(f"✅ Configuration loaded successfully for '{settings.app_name}'")
+    logger.info(f"Database: {settings.db.host}:{settings.db.port}/{settings.db.name}")
+    logger.info(f"Gemini API configured: {'Yes' if settings.gemini.api_key else 'No'}")
 except Exception as exc: 
     logger.critical("‼️  Failed to load configuration – exiting", exc_info=exc)
     raise
