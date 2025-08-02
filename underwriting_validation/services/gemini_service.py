@@ -47,19 +47,21 @@ class GeminiService:
     
     def __init__(self):
         """Configure Gemini service – heavy model load deferred until first use."""
-        # Store config only
-        self.model_name = settings.gemini.model_name
-        self.temperature = settings.gemini.temperature
-        self.max_output_tokens = settings.gemini.max_output_tokens
+        # Store configuration from settings
+        self.config = settings.gemini
+        self.model_name = self.config.model_name
+        self.temperature = self.config.temperature
+        self.max_output_tokens = self.config.max_output_tokens
 
-        # Generation + safety defaults
+        # Generation configuration
         self.generation_config = {
             "temperature": self.temperature, 
             "top_p": 1, 
             "top_k": 32,
             "max_output_tokens": self.max_output_tokens,
         }
-        # Default dict-form list (compatible with google-generative-ai client).
+        
+        # Safety settings in dictionary format (for google-generative-ai client)
         self._safety_settings_dicts = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
@@ -67,11 +69,13 @@ class GeminiService:
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
         ]
 
-        # Vertex-AI specific object list (created lazily to avoid importing until needed)
+        # Vertex-AI specific safety settings (created lazily)
         self._safety_settings_vertex: List[SafetySetting] | None = None
 
+        # Model initialization
         self._model = None  # lazy initialization
-        self.use_vertex = True  # Always use Vertex AI with service account
+        self.use_vertex = self.config.uses_service_account  # Determined by credentials
+        self.safety_settings = self._safety_settings_dicts  # Default to dict format
 
         # Option to initialize eagerly
         if get_env_var_bool("GEMINI_EAGER_INIT", False):
@@ -79,7 +83,7 @@ class GeminiService:
                 self._ensure_model()
                 logger.info("Gemini model eagerly initialized")
             except Exception as e:
-                logger.warning(f"Failed to eagerly initialize Gemini: {e}")
+                logger.warning(f"Eager initialization failed: {e}")
 
     async def analyze_messages(self, messages: List[str], response_format: Optional[str] = None) -> Result[Dict]:
         """
@@ -220,65 +224,32 @@ class GeminiService:
     # Internal helpers
     # ---------------------------------------------------------------------
 
-    def _ensure_model(self, retries: int = 5):  # Increased retries
-        """Lazily create the GenerativeModel with enhanced exponential back-off and network resilience."""
+    def _ensure_model(self, retries: int = 5):
+        """Initialize the Gemini model with retry logic."""
         if self._model is not None:
             return
-
+            
+        if not self.config.has_valid_credentials:
+            raise LLMError(
+                code=ErrorCode.INVALID_CREDENTIALS,
+                message="No valid Google credentials configured",
+                user_message="AI service authentication is not properly configured."
+            )
+        
         delay = 1.0
         last_err: Exception | None = None
         
         for attempt in range(1, retries + 1):
             try:
-                # Check if we have service account credentials
-                creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-                project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or settings.google_cloud.project_id
-                location = os.environ.get("GOOGLE_CLOUD_LOCATION") or settings.google_cloud.location
-                
-                # Prefer service-account creds dropped by AWS Secrets Manager.
-                # If they are not present we fall back to API-key auth.
-                if not creds_path:
-                    # Try API key approach as fallback
-                    api_key = settings.gemini.api_key or os.environ.get("GOOGLE_API_KEY")
-                    if api_key:
-                        logger.info("Using API key for Gemini authentication")
-                        genai.configure(api_key=api_key)
-                        self._model = genai.GenerativeModel(
-                            model_name=self.model_name,
-                            generation_config=self.generation_config,
-                            safety_settings=self.safety_settings,
-                        )
-                        self.use_vertex = False
-                        # Use the dict form for google-generative-ai
-                        self.safety_settings = self._safety_settings_dicts
-                        logger.info("Gemini model initialized with API key on attempt %d", attempt)
-                        return
-                    else:
-                        raise ValueError("No Google credentials found - neither service account nor API key")
-                
-                # Use Vertex AI with service account
-                if not project_id:
-                    raise ValueError("GOOGLE_CLOUD_PROJECT not set")
-                
-                logger.info(f"Initializing Vertex AI with project: {project_id}, location: {location} (attempt {attempt})")
-                aiplatform.init(project=project_id, location=location)
-                self._model = GenerativeModel(model_name=self.model_name)
-                self.use_vertex = True
-                
-                # Build SafetySetting objects once
-                if self._safety_settings_vertex is None:
-                    self._safety_settings_vertex = [
-                        SafetySetting(category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
-                        SafetySetting(category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
-                        SafetySetting(category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
-                        SafetySetting(category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
-                    ]
-
-                self.safety_settings = self._safety_settings_vertex
-                
-                logger.info("Gemini model initialized with Vertex AI on attempt %d", attempt)
-                return
-                
+                if self.config.uses_api_key:
+                    self._initialize_with_api_key(attempt)
+                    return
+                elif self.config.uses_service_account:
+                    self._initialize_with_service_account(attempt)
+                    return
+                else:
+                    raise ValueError(f"Unsupported authentication method: {self.config.credentials.auth_method}")
+                    
             except (google_auth_exceptions.DefaultCredentialsError, 
                     google_api_exceptions.Unauthenticated) as e:
                 # Don't retry auth errors
@@ -292,26 +263,95 @@ class GeminiService:
                     google_api_exceptions.DeadlineExceeded,
                     ConnectionError,
                     OSError) as e:
-                # Retry network-related errors
                 last_err = e
-                logger.warning(f"Network error on attempt {attempt}/{retries}: {e}")
+                logger.warning(f"Retryable error on attempt {attempt}: {e}")
                 if attempt < retries:
-                    # Exponential backoff with jitter for network issues
                     jitter = random.uniform(0.1, 0.5)
                     sleep_time = delay + jitter
                     logger.info(f"Retrying in {sleep_time:.1f}s...")
                     time.sleep(sleep_time)
-                    delay *= 1.5  # Slower backoff for network issues
+                    delay *= 1.5  # exponential backoff
+                    continue
+                else:
+                    raise LLMError(
+                        code=ErrorCode.SERVICE_UNAVAILABLE,
+                        message=f"Service unavailable after {retries} attempts: {e}",
+                        cause=e
+                    )
             except Exception as e:
-                last_err = e
-                logger.warning(f"Gemini init attempt {attempt} failed: {e}")
-                if attempt < retries:
-                    time.sleep(delay)
-                    delay *= 2
+                logger.error(f"Unexpected error on attempt {attempt}: {e}")
+                raise LLMError(
+                    code=ErrorCode.MODEL_INITIALIZATION_FAILED,
+                    message=f"Failed to initialize Gemini model: {e}",
+                    cause=e
+                )
         
-        # After retries
+        # Should not reach here, but just for safety
         raise LLMError(
-            code=ErrorCode.INITIALIZATION_ERROR, 
-            message=f"Failed to initialize Gemini after {retries} attempts. Last error: {last_err}", 
+            code=ErrorCode.MODEL_INITIALIZATION_FAILED,
+            message=f"Failed to initialize Gemini model after {retries} attempts",
             cause=last_err
         )
+    
+    def _initialize_with_api_key(self, attempt: int):
+        """Initialize Gemini model using API key authentication."""
+        logger.info(f"Initializing Gemini with API key (attempt {attempt})")
+        
+        genai.configure(api_key=self.config.credentials.api_key)
+        self._model = genai.GenerativeModel(
+            model_name=self.model_name,
+            generation_config=self.generation_config,
+            safety_settings=self._safety_settings_dicts,
+        )
+        self.use_vertex = False
+        self.safety_settings = self._safety_settings_dicts
+        
+        logger.info(f"Gemini model initialized with API key on attempt {attempt}")
+    
+    def _initialize_with_service_account(self, attempt: int):
+        """Initialize Gemini model using service account authentication."""
+        project_id = (
+            self.config.credentials.project_id or 
+            os.environ.get("GOOGLE_CLOUD_PROJECT") or 
+            settings.google_cloud.project_id
+        )
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION") or settings.google_cloud.location
+        
+        if not project_id:
+            raise ValueError("No Google Cloud project ID configured")
+        
+        # Set up credentials file if needed
+        creds_path = self._setup_credentials_file()
+        
+        logger.info(f"Initializing Vertex AI with project: {project_id}, location: {location} (attempt {attempt})")
+        aiplatform.init(project=project_id, location=location)
+        self._model = GenerativeModel(model_name=self.model_name)
+        self.use_vertex = True
+        
+        # Build SafetySetting objects once
+        if self._safety_settings_vertex is None:
+            self._safety_settings_vertex = [
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
+            ]
+
+        self.safety_settings = self._safety_settings_vertex
+        logger.info(f"Gemini model initialized with Vertex AI on attempt {attempt}")
+    
+    def _setup_credentials_file(self) -> Optional[str]:
+        """Set up the credentials file for Google Cloud authentication."""
+        # Check if credentials file already exists
+        existing_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if existing_path and os.path.exists(existing_path):
+            return existing_path
+        
+        # Create temporary credentials file from settings if needed
+        temp_path = self.config.credentials.create_credentials_file()
+        if temp_path:
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_path
+            logger.info("Set up temporary credentials file for Google Cloud authentication")
+            return temp_path
+        
+        return None

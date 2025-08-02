@@ -73,14 +73,46 @@ The service uses environment variables for configuration:
 
 ## Running the Service
 
+### Prerequisites
+
+Install dependencies using Poetry:
+```bash
+# Install Poetry (if not already installed)
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Install project dependencies
+poetry install
+```
+
 ### Development
 ```bash
-python -m Underwriting.api
+# Using Poetry
+poetry run python -m underwriting_validation.api
+
+# Or activate the virtual environment first
+poetry shell
+python -m underwriting_validation.api
+
+# Or use the Poetry script
+poetry run underwriting-api
 ```
 
 ### Production
 ```bash
-uvicorn Underwriting.api.app:app --host 0.0.0.0 --port 3978
+# Using Poetry
+poetry run uvicorn underwriting_validation.api.app:app --host 0.0.0.0 --port 3978
+
+# Or traditional uvicorn (after poetry install)
+uvicorn underwriting_validation.api.app:app --host 0.0.0.0 --port 3978
+```
+
+### Docker (Recommended)
+```bash
+# Development with Docker Compose
+docker-compose up --build
+
+# Production deployment
+docker-compose -f docker-compose.prod.yml up --build
 ```
 
 ## API Documentation

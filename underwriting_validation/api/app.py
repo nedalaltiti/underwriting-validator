@@ -92,7 +92,6 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
             logger.warning("Continuing without database (SKIP_DB_INIT=true)")
 
     # Store temporary credentials path for cleanup
-    if settings.gemini.use_aws_secrets and settings.gemini.credentials_path:
         _temp_credentials_path = settings.gemini.credentials_path
 
     # Initialize LLM service in background to reduce first-request latency

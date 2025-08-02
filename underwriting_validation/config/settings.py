@@ -1,4 +1,7 @@
 import logging
+import os
+import json
+import tempfile
 from dataclasses import dataclass, field
 from typing import Optional, List
 from underwriting_validation.config.environment import (
@@ -6,6 +9,151 @@ from underwriting_validation.config.environment import (
 )
 
 logger = logging.getLogger("underwriting_validation.config")
+
+@dataclass(frozen=True)
+class GoogleCredentials:
+    """Handles Google Cloud service account credentials from various sources."""
+    
+    # Credential sources
+    json_file_path: Optional[str] = None
+    api_key: Optional[str] = None
+    temp_credentials_file: Optional[str] = None
+    
+    # Service account components (for environment variable-based auth)
+    service_account_type: Optional[str] = None
+    project_id: Optional[str] = None
+    private_key_id: Optional[str] = None
+    private_key: Optional[str] = None
+    client_email: Optional[str] = None
+    client_id: Optional[str] = None
+    auth_uri: Optional[str] = None
+    token_uri: Optional[str] = None
+    auth_provider_x509_cert_url: Optional[str] = None
+    client_x509_cert_url: Optional[str] = None
+    universe_domain: Optional[str] = None
+    
+    @classmethod
+    def from_environment(cls) -> "GoogleCredentials":
+        """Create credentials from environment variables with fallback priority."""
+        logger.debug("Loading Google credentials from environment")
+        
+        # Check for existing JSON file path first
+        json_file_path = get_env_var("GOOGLE_APPLICATION_CREDENTIALS")
+        if json_file_path and os.path.exists(json_file_path):
+            logger.info("Using existing GOOGLE_APPLICATION_CREDENTIALS file")
+            return cls(json_file_path=json_file_path)
+        
+        # Check for individual service account environment variables
+        service_account_vars = {
+            'service_account_type': get_env_var('GOOGLE_SERVICE_ACCOUNT_TYPE'),
+            'project_id': get_env_var('GOOGLE_SERVICE_ACCOUNT_PROJECT_ID'),
+            'private_key_id': get_env_var('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_ID'),
+            'private_key': get_env_var('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY'),
+            'client_email': get_env_var('GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL'),
+            'client_id': get_env_var('GOOGLE_SERVICE_ACCOUNT_CLIENT_ID'),
+            'auth_uri': get_env_var('GOOGLE_SERVICE_ACCOUNT_AUTH_URI'),
+            'token_uri': get_env_var('GOOGLE_SERVICE_ACCOUNT_TOKEN_URI'),
+        }
+        
+        # Check if we have the minimum required service account fields
+        required_fields = ['service_account_type', 'project_id', 'private_key', 'client_email']
+        has_service_account = all(service_account_vars.get(field) for field in required_fields)
+        
+        if has_service_account:
+            logger.info("Using service account credentials from environment variables")
+            return cls(
+                service_account_type=service_account_vars['service_account_type'],
+                project_id=service_account_vars['project_id'], 
+                private_key_id=service_account_vars['private_key_id'],
+                private_key=service_account_vars['private_key'],
+                client_email=service_account_vars['client_email'],
+                client_id=service_account_vars['client_id'],
+                auth_uri=service_account_vars['auth_uri'] or 'https://accounts.google.com/o/oauth2/auth',
+                token_uri=service_account_vars['token_uri'] or 'https://oauth2.googleapis.com/token',
+                auth_provider_x509_cert_url=get_env_var(
+                    'GOOGLE_SERVICE_ACCOUNT_AUTH_PROVIDER_X509_CERT_URL',
+                    'https://www.googleapis.com/oauth2/v1/certs'
+                ),
+                client_x509_cert_url=get_env_var('GOOGLE_SERVICE_ACCOUNT_CLIENT_X509_CERT_URL'),
+                universe_domain=get_env_var('GOOGLE_SERVICE_ACCOUNT_UNIVERSE_DOMAIN', 'googleapis.com')
+            )
+        
+        # Fallback to API key
+        api_key = get_env_var("GOOGLE_API_KEY")
+        if api_key:
+            logger.info("Using Google API key for authentication")
+            return cls(api_key=api_key)
+        
+        # No credentials found
+        logger.warning("No Google credentials found in environment")
+        return cls()
+    
+    def create_credentials_file(self) -> Optional[str]:
+        """Create a temporary credentials file from environment variables if needed."""
+        if self.json_file_path:
+            return self.json_file_path
+            
+        if not self._has_service_account_credentials():
+            return None
+            
+        try:
+            # Create the service account credentials dictionary
+            credentials_dict = {
+                "type": self.service_account_type,
+                "project_id": self.project_id,
+                "private_key_id": self.private_key_id,
+                "private_key": self.private_key.replace('\\n', '\n') if self.private_key else None,
+                "client_email": self.client_email,
+                "client_id": self.client_id,
+                "auth_uri": self.auth_uri,
+                "token_uri": self.token_uri,
+                "auth_provider_x509_cert_url": self.auth_provider_x509_cert_url,
+                "client_x509_cert_url": self.client_x509_cert_url,
+                "universe_domain": self.universe_domain
+            }
+            
+            # Create a temporary file to store the credentials
+            temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json')
+            json.dump(credentials_dict, temp_file, indent=2)
+            temp_file.flush()
+            temp_file.close()
+            
+            logger.info(f"Created temporary service account credentials file")
+            return temp_file.name
+            
+        except Exception as e:
+            logger.error(f"Failed to create temporary credentials file: {e}")
+            return None
+    
+    def _has_service_account_credentials(self) -> bool:
+        """Check if we have the minimum required service account credentials."""
+        return bool(
+            self.service_account_type and 
+            self.project_id and 
+            self.private_key and 
+            self.client_email
+        )
+    
+    @property
+    def has_credentials(self) -> bool:
+        """Check if we have any valid credentials."""
+        return bool(
+            self.json_file_path or 
+            self.api_key or 
+            self._has_service_account_credentials()
+        )
+    
+    @property
+    def auth_method(self) -> str:
+        """Get the authentication method being used."""
+        if self.json_file_path:
+            return "service_account_file"
+        elif self._has_service_account_credentials():
+            return "service_account_env"
+        elif self.api_key:
+            return "api_key"
+        else:
+            return "none"
 
 @dataclass(frozen=True)
 class DatabaseSettings:
@@ -86,23 +234,43 @@ class DatabaseSettings:
     
 @dataclass(frozen=True)
 class GeminiSettings:
+    """Configuration for Google Gemini AI service."""
     model_name: str = "gemini-2.0-flash-001"
     temperature: float = 0.0
     max_output_tokens: int = 1024
-    api_key: Optional[str] = None
+    credentials: GoogleCredentials = field(default_factory=GoogleCredentials)
 
     @classmethod
     def from_environment(cls) -> "GeminiSettings":
-        api_key = get_env_var("GOOGLE_API_KEY")
-        if not api_key:
-            logger.warning("GOOGLE_API_KEY not set - Gemini functionality may not work")
+        """Create Gemini settings from environment variables."""
+        credentials = GoogleCredentials.from_environment()
+        
+        if not credentials.has_credentials:
+            logger.warning("No Google credentials found - Gemini functionality may not work properly")
+        else:
+            logger.info(f"Gemini authentication method: {credentials.auth_method}")
             
         return cls(
             model_name=get_env_var("GEMINI_MODEL_NAME", cls.model_name),
             temperature=get_env_var_float("GEMINI_TEMPERATURE", cls.temperature),
             max_output_tokens=get_env_var_int("GEMINI_MAX_OUTPUT_TOKENS", cls.max_output_tokens),
-            api_key=api_key,
+            credentials=credentials,
         )
+        
+    @property
+    def has_valid_credentials(self) -> bool:
+        """Check if we have valid credentials for Gemini."""
+        return self.credentials.has_credentials
+        
+    @property
+    def uses_service_account(self) -> bool:
+        """Check if using service account authentication."""
+        return self.credentials.auth_method in ["service_account_file", "service_account_env"]
+        
+    @property
+    def uses_api_key(self) -> bool:
+        """Check if using API key authentication."""
+        return self.credentials.auth_method == "api_key"
 
 @dataclass(frozen=True)
 class GoogleCloudSettings:
@@ -230,7 +398,8 @@ try:
     settings = AppSettings.from_environment()
     logger.info(f"✅ Configuration loaded successfully for '{settings.app_name}'")
     logger.info(f"Database: {settings.db.host}:{settings.db.port}/{settings.db.name}")
-    logger.info(f"Gemini API configured: {'Yes' if settings.gemini.api_key else 'No'}")
+    logger.info(f"Gemini API configured: {'Yes' if settings.gemini.has_valid_credentials else 'No'}")
+    logger.info(f"Gemini auth method: {settings.gemini.credentials.auth_method}")
 except Exception as exc: 
     logger.critical("‼️  Failed to load configuration – exiting", exc_info=exc)
     raise

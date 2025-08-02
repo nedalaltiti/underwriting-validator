@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   # Main application service
@@ -39,6 +39,8 @@ services:
     volumes:
       # Mount source code for development (hot reload)
       - .:/app:ro
+      # Exclude .venv from mount to prevent conflicts
+      - /app/.venv
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3978/health"]
@@ -56,7 +58,7 @@ services:
       - POSTGRES_PASSWORD=underwriting_pass
       - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
