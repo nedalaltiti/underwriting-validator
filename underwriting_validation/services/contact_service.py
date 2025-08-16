@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from underwriting_validation.infrastructure.contact_repository import ContactRepository
 from underwriting_validation.services.hardship_validation_service import HardshipValidationService
 from underwriting_validation.services.budget_validation_service import BudgetValidationService, BudgetDataIn
+from underwriting_validation.services.address_validation_service import AddressValidationService, AddressDataIn
 from underwriting_validation.config.settings import settings
 from underwriting_validation.utils.pii_filter import mask_contact_id
 
@@ -34,6 +35,7 @@ class ContactService:
     def __init__(self, hardship_service: HardshipValidationService, repository: ContactRepository):
         self.hardship_service = hardship_service
         self.budget_service = BudgetValidationService()
+        self.address_service = AddressValidationService()
         self.repository = repository
         
         # Per-request cache for hardship data to avoid duplicate queries
@@ -272,6 +274,7 @@ class ContactService:
                 "contact_id": contact_id,
                 "budget_data": budget_data,
                 "analysis": {
+                    "surplus_indication": analysis.surplus_indication,
                     "result": analysis.result.value,
                     "reason": analysis.reason,
                     "total_net_income": analysis.total_net_income,
@@ -319,6 +322,145 @@ class ContactService:
             logger.error(f"Error retrieving contact hardship data for {masked_id}: {e}")
             raise ContactNotFoundError(f"Contact {contact_id} not found in database")
     
+    async def get_contact_with_address_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve contact information with address data using repository.
+        
+        Args:
+            contact_id: The ID of the contact to retrieve
+            
+        Returns:
+            Dictionary containing contact and address information or None if not found
+        """
+        # Validate contact ID format first
+        if not self.validate_contact_id(contact_id):
+            raise InvalidContactIDError(f"Contact ID {contact_id} is out of range (must be 1-11 digits)")
+        
+        try:
+            data = await self.repository.fetch_contact_with_address_data(contact_id)
+            if not data:
+                raise ContactNotFoundError(f"Contact {contact_id} not found in database")
+            return data
+        except Exception as e:
+            masked_id = mask_contact_id(contact_id)
+            logger.error(f"Error retrieving contact address data for {masked_id}: {e}")
+            raise ContactNotFoundError(f"Contact {contact_id} not found in database")
+    
+    async def check_contact_eligibility(self, contact_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Check if a contact is eligible for validation process.
+        
+        Args:
+            contact_id: The ID of the contact to check
+            
+        Returns:
+            Dictionary containing eligibility information or None if not eligible
+        """
+        # Validate contact ID format first
+        if not self.validate_contact_id(contact_id):
+            raise InvalidContactIDError(f"Contact ID {contact_id} is out of range (must be 1-11 digits)")
+        
+        try:
+            eligibility_data = await self.repository.check_contact_eligibility(contact_id)
+            if not eligibility_data:
+                return None  # Contact is not eligible
+            return eligibility_data
+        except Exception as e:
+            masked_id = mask_contact_id(contact_id)
+            logger.error(f"Error checking contact eligibility for {masked_id}: {e}")
+            return None
+    
+    async def analyze_contact_address(self, contact_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve address data and analyze if the state/company assignment is valid.
+        
+        Args:
+            contact_id: The ID of the contact to analyze
+            
+        Returns:
+            Dictionary containing address analysis results or None if contact not found
+        """
+        # Validate contact ID format first
+        if not self.validate_contact_id(contact_id):
+            raise InvalidContactIDError(f"Contact ID {contact_id} is out of range (must be 1-11 digits)")
+        
+        try:
+            # Get address data
+            address_data = await self.get_contact_with_address_data(contact_id)
+            
+            masked_id = mask_contact_id(contact_id)
+            if not address_data:
+                logger.warning(f"Contact {masked_id} not found in database")
+                raise ContactNotFoundError(f"Contact {contact_id} not found in database")
+            
+            # Check if there's any address data to analyze
+            has_address_data = any([
+                address_data.get('state'),
+                address_data.get('assigned_company')
+            ])
+            
+            masked_id = mask_contact_id(contact_id)
+            if not has_address_data:
+                logger.info(f"No address data available for contact {masked_id}")
+                from underwriting_validation.utils.validation_responses import format_no_data_response
+                return {
+                    "contact_id": contact_id,
+                    "analysis": {
+                        "result": "no_data",
+                        "reason": "No address data available for analysis"
+                    },
+                    "formatted_response": format_no_data_response(contact_id, "address")
+                }
+            
+            # Convert dictionary to Pydantic model for type safety
+            address_data_model = AddressDataIn(
+                contact_id=address_data['contact_id'],
+                state=address_data.get('state'),
+                assigned_company=address_data.get('assigned_company')
+            )
+            
+            # Analyze address validity
+            analysis_result = await self.address_service.analyze_address_validity(address_data_model)
+            
+            masked_id = mask_contact_id(contact_id)
+            if analysis_result.is_error():
+                logger.error(f"Address analysis failed for contact {masked_id}: {analysis_result.error}")
+                from underwriting_validation.utils.validation_responses import format_error_response
+                return {
+                    "contact_id": contact_id,
+                    "error": str(analysis_result.error),
+                    "analysis": None,
+                    "formatted_response": format_error_response(contact_id, f"Unable to analyze address data for contact {contact_id}. Please try again or contact support.", "address")
+                }
+            
+            analysis = analysis_result.value
+            formatted_response = self.address_service.format_address_response(analysis, address_data_model)
+            
+            return {
+                "contact_id": contact_id,
+                "address_data": address_data,
+                "analysis": {
+                    "result": analysis.result.value,
+                    "reason": analysis.reason,
+                    "state_check": analysis.state_check
+                },
+                "formatted_response": formatted_response
+            }
+            
+        except (InvalidContactIDError, ContactNotFoundError):
+            # Re-raise these specific exceptions
+            raise
+        except Exception as e:
+            masked_id = mask_contact_id(contact_id)
+            logger.error(f"Error analyzing address for contact {masked_id}: {e}")
+            from underwriting_validation.utils.validation_responses import format_error_response
+            return {
+                "contact_id": contact_id,
+                "error": str(e),
+                "analysis": None,
+                "formatted_response": format_error_response(contact_id, f"Error analyzing address data for contact {contact_id}. {e}")
+            }
+    
 
     
     def format_contact_response(self, contact: Dict[str, Any]) -> str:
@@ -355,5 +497,27 @@ class ContactService:
         # Use the budget analysis response formatter
         from underwriting_validation.utils.validation_responses import format_budget_analysis_response
         return format_budget_analysis_response(budget)
+    
+    def format_address_response(self, address: Dict[str, Any]) -> str:
+        """
+        Format address analysis results into a user-friendly response.
+        
+        Args:
+            address: Address analysis dictionary from analyze_contact_address
+            
+        Returns:
+            Formatted string response
+        """
+        # If there's a formatted response already provided, use it
+        if address.get('formatted_response'):
+            return address['formatted_response']
+        
+        # If there's an error, return the error message
+        if address.get('error'):
+            return f"Error analyzing address data: {address['error']}"
+        
+        # Use the address analysis response formatter
+        from underwriting_validation.utils.validation_responses import format_address_analysis_response
+        return format_address_analysis_response(address)
     
  
