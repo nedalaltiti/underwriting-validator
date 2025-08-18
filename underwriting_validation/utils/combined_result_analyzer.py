@@ -29,7 +29,8 @@ class CombinedResultAnalyzer:
         self,
         hardship_analysis: Optional[Dict[str, Any]] = None,
         budget_analysis: Optional[Dict[str, Any]] = None,
-        address_analysis: Optional[Dict[str, Any]] = None
+        address_analysis: Optional[Dict[str, Any]] = None,
+        contract_analysis: Optional[Dict[str, Any]] = None
     ) -> tuple[str, str]:
         """
         Analyze combined validation results and determine overall result with reasoning.
@@ -38,6 +39,7 @@ class CombinedResultAnalyzer:
             hardship_analysis: Hardship validation analysis data
             budget_analysis: Budget validation analysis data
             address_analysis: Address validation analysis data
+            contract_analysis: Contract validation analysis data
             
         Returns:
             Tuple of (combined_result, combined_result_reason)
@@ -46,13 +48,14 @@ class CombinedResultAnalyzer:
         hardship_result = self._extract_validation_result('hardship', hardship_analysis)
         budget_result = self._extract_validation_result('budget', budget_analysis)
         address_result = self._extract_validation_result('address', address_analysis)
+        contract_result = self._extract_validation_result('contract', contract_analysis)
         
         # Get available validations
-        available_validations = [r for r in [hardship_result, budget_result, address_result] if r is not None]
+        available_validations = [r for r in [hardship_result, budget_result, address_result, contract_result] if r is not None]
         
         # If no data for any validation
         if not available_validations:
-            return "no_data", "No validation data available for any category (hardship, budget, or address)"
+            return "no_data", "No validation data available for any category (hardship, budget, address, or contract)"
         
         # Check if any validation returned "not_eligible"
         not_eligible_validations = [v for v in available_validations if v.result == "not_eligible"]
@@ -127,6 +130,32 @@ class CombinedResultAnalyzer:
                 type="address",
                 result=result,
                 reason=f"State: {state_check}, Company: {assigned_company}"
+            )
+        elif validation_type == "contract":
+            result = analysis_data.get('contract_validation_result', 'no_data')
+            ip_check = analysis_data.get('ip_check', 'Unknown')
+            email_check = analysis_data.get('email_check', 'Unknown')
+            signature_check = analysis_data.get('signature_check', 'Unknown')
+            bank_check = analysis_data.get('bank_check', 'Unknown')
+            name_check = analysis_data.get('name_check', 'Unknown')
+            ssn_check = analysis_data.get('ssn_check', 'Unknown')
+            dob_check = analysis_data.get('dob_check', 'Unknown')
+            fees_check = analysis_data.get('fees_check', 'Unknown')
+            plan_check = analysis_data.get('plan_check', 'Unknown')
+            gateway_signature_check = analysis_data.get('gateway_signature_check', 'Unknown')
+            payment_count_check = analysis_data.get('payment_count_check', 'Unknown')
+            payment_amounts_check = analysis_data.get('payment_amounts_check', 'Unknown')
+            payment_dates_check = analysis_data.get('payment_dates_check', 'Unknown')
+            if result == "no_data":
+                return ValidationResult(
+                    type="contract",
+                    result="no_data",
+                    reason="No contract data available"
+                )
+            return ValidationResult(
+                type="contract",
+                result=result,
+                reason=f"IP: {ip_check}, Email: {email_check}, Signature: {signature_check}, Bank: {bank_check}, VLP Name: {name_check}, VLP SSN: {ssn_check}, VLP DOB: {dob_check}, VLP Fees: {fees_check}, VLP Plan: {plan_check}, Gateway Sig: {gateway_signature_check}, Payment Count: {payment_count_check}, Payment Amounts: {payment_amounts_check}, Payment Dates: {payment_dates_check}"
             )
         
         return None

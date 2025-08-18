@@ -15,6 +15,7 @@ from enum import Enum
 from .hardship_responses import format_hardship_response, format_contact_response
 from .budget_responses import format_budget_response, format_budget_analysis_response
 from .address_responses import format_address_response, format_address_analysis_response
+from .contract_responses import format_contract_response, format_contract_analysis_response
 from .combined_responses import format_combined_validation_response
 from .error_responses import (
     format_no_data_response, 
@@ -60,6 +61,10 @@ __all__ = [
     'format_address_response',
     'format_address_analysis_response',
     
+    # Contract responses
+    'format_contract_response',
+    'format_contract_analysis_response',
+    
     # Combined responses
     'format_combined_validation_response',
     
@@ -86,6 +91,10 @@ class ValidationResponseFormatter:
         return format_address_response(analysis, address_data)
     
     @staticmethod
+    def format_contract_response(analysis, contract_data):
+        return format_contract_response(analysis, contract_data)
+    
+    @staticmethod
     def format_contact_response(contact):
         return format_contact_response(contact)
     
@@ -96,6 +105,10 @@ class ValidationResponseFormatter:
     @staticmethod
     def format_address_analysis_response(address):
         return format_address_analysis_response(address)
+    
+    @staticmethod
+    def format_contract_analysis_response(contract):
+        return format_contract_analysis_response(contract)
     
     @staticmethod
     def format_combined_validation_response(

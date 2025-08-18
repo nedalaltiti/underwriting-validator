@@ -25,6 +25,10 @@ class Contact:
     leadstatus = Column(Numeric, nullable=True)
     state = Column(Text, nullable=True)  # State field for address validation; Text type for unlimited length
     company_id = Column(Numeric, nullable=True)  # Company ID for address validation
+    firstname = Column(Text, nullable=True)  # First name for VLP validation
+    lastname = Column(Text, nullable=True)  # Last name for VLP validation
+    ssn = Column(Text, nullable=True)  # SSN for VLP validation
+    dob = Column(Date, nullable=True)  # Date of birth for VLP validation
 
 @public_mapper.mapped
 class ContactCategory:
@@ -104,6 +108,7 @@ class PaymentGatewayAgreement:
 
     file_id = Column(Numeric,primary_key=True, autoincrement=True)
     client_state = Column(String(255), nullable=True)
+    client_signature = Column(String(255), nullable=True)
 
 @public_mapper.mapped
 class EngagementTerm:
@@ -112,3 +117,116 @@ class EngagementTerm:
 
     file_id = Column(Numeric, primary_key=True, autoincrement=True)
     company_name = Column(String(255), nullable=True)
+    client_signature = Column(String(255), nullable=True)
+    client_signature_date = Column(Date, nullable=True)
+    coclient_signature = Column(String(255), nullable=True)
+    coclient_signature_date = Column(Date, nullable=True)
+
+@public_mapper.mapped
+class ClixsignCertificateSender:
+    __tablename__ = "clixsign_certificate_sender"
+    __table_args__ = {"schema": "underwriting"}
+
+    file_id = Column(Numeric, primary_key=True, autoincrement=True)
+    sender_ip_address = Column(String(32), nullable=True) 
+
+@public_mapper.mapped
+class ClixsignCertificateSigner:
+    __tablename__ = "clixsign_certificate_signer"
+    __table_args__ = {"schema": "underwriting"}
+
+    id = Column(Numeric, primary_key=True, autoincrement=True)
+    file_id = Column(Numeric, nullable=True)
+    signer_ip_address = Column(String(32), nullable=True)  
+
+@public_mapper.mapped
+class FinancialAnalysis:
+    __tablename__ = "financial_analysis"
+    __table_args__ = {"schema": "underwriting"}
+
+    file_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    applicant_email = Column(String(255), nullable=True)
+
+@public_mapper.mapped
+class PaymentGatewayBankInfo:
+    __tablename__ = "payment_gateway_bank_info"
+    __table_args__ = {"schema": "underwriting"}
+
+    file_id = Column(Numeric, primary_key=True, autoincrement=True)
+    account_number = Column(String(255), nullable=True)
+    routing_number = Column(String(255), nullable=True)
+    bank_name = Column(String(255), nullable=True)
+    account_type = Column(String(255), nullable=True)
+    address = Column(String(255), nullable=True)
+
+@public_mapper.mapped
+class BankAccount:
+    __tablename__ = "bank_accounts"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Numeric, primary_key=True, autoincrement=True)
+    contact_id = Column(Numeric, ForeignKey("public.contacts.id"), nullable=False)
+    account_num = Column(Text, nullable=True)
+    routing_num = Column(Text, nullable=True)
+    bank_name = Column(Text, nullable=True)
+    account_type = Column(Text, nullable=True)
+    bank_address = Column(Text, nullable=True)
+
+# VLP (Voluntary Legal Plan) models
+@public_mapper.mapped
+class LegalPlanAgreement:
+    __tablename__ = "legal_plan_agreement"
+    __table_args__ = {"schema": "underwriting"}
+
+    file_id = Column(Numeric, primary_key=True, autoincrement=True)
+    legal_plan_provider = Column(String(255), nullable=True)
+    client_signature = Column(String(255), nullable=True)
+    signature_date = Column(Date, nullable=True)
+    member_name = Column(String(255), nullable=True)
+    member_ssn = Column(String(255), nullable=True)
+    member_dob = Column(Date, nullable=True)
+
+@public_mapper.mapped
+class EnrollmentPlan:
+    __tablename__ = "enrollment_plan"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Numeric, primary_key=True, autoincrement=True)
+    contact_id = Column(Numeric, ForeignKey("public.contacts.id"), nullable=False)
+    plan_id = Column(Numeric, nullable=True)
+    fee2 = Column(Text, nullable=True)  # Legal setup fee
+    fee3 = Column(Text, nullable=True)  # Legal monthly fee
+
+@public_mapper.mapped
+class EnrollmentDefaults2:
+    __tablename__ = "enrollment_defaults2"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Numeric, primary_key=True, autoincrement=True)
+    title = Column(Text, nullable=True)
+
+@public_mapper.mapped
+class PaymentScheduleData:
+    __tablename__ = "payment_schedule_data"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Numeric, primary_key=True, autoincrement=True)
+    contact_id = Column(Numeric, ForeignKey("public.contacts.id"), nullable=False)
+    payment_date = Column(Date, nullable=True)
+    fee2 = Column(Numeric, nullable=True)  # Legal setup fee
+    fee3 = Column(Numeric, nullable=True)  # Legal monthly fee
+    fee1 = Column(Numeric, nullable=True)  # Payment amount
+    payment_num = Column(Numeric, nullable=True)  # Payment number
+    _fivetran_deleted = Column(Boolean, nullable=True)  # Soft delete flag
+
+# Gateway models
+@public_mapper.mapped
+class PaymentGatewayDepositSchedule:
+    __tablename__ = "payment_gateway_deposit_schedule"
+    __table_args__ = {"schema": "underwriting"}
+
+    id = Column(Numeric, primary_key=True, autoincrement=True)
+    file_id = Column(Numeric, nullable=True)
+    payment_no = Column(String(255), nullable=True)
+    amount = Column(Numeric, nullable=True)
+    process_date = Column(Date, nullable=True)

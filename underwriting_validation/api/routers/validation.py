@@ -51,6 +51,7 @@ class CombinedValidationResponse(BaseModel):
     hardship_data: Optional[Dict[str, Any]] = None
     budget_data: Optional[Dict[str, Any]] = None
     address_data: Optional[Dict[str, Any]] = None
+    contract_data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
 @router.post("/contact", 
@@ -197,9 +198,12 @@ async def validate_contact_combined(
             hardship_data=result.get("hardship_data"),
             budget_data=result.get("budget_data"),
             address_data=result.get("address_data"),
+            contract_data=result.get("contract_data"),
             error=result.get("error")
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         masked_id = mask_contact_id(req.contact_id)
         logger.error(f"Error performing combined validation for contact {masked_id}: {e}")
@@ -214,8 +218,11 @@ async def validate_contact_combined(
             hardship_data=None,
             budget_data=None,
             address_data=None,
+            contract_data=None,
             error=str(e)
         )
+
+
 
 @router.get("/contact/{contact_id}")
 async def get_contact_info(
