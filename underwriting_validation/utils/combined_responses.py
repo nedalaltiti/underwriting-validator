@@ -4,7 +4,7 @@ Combined validation response formatters.
 This module contains formatting functions for combined validation responses.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 def format_combined_validation_response(
@@ -13,7 +13,8 @@ def format_combined_validation_response(
     budget_analysis: Any,
     address_analysis: Any,
     contract_analysis: Any,
-    combined_result: str
+    combined_result: str,
+    contract_data: Optional[Any] = None
 ) -> str:
     """Format combined hardship, budget, address, and contract analysis into a comprehensive response."""
     response_parts = []
@@ -152,24 +153,28 @@ def format_combined_validation_response(
                     response_parts.append(f"• Plan Name: {contract_analysis.plan_name}")
             
             # Gateway Data
-            if any([contract_analysis.gateway_client_signature, contract_analysis.contract_payment_count, 
-                   contract_analysis.forth_payment_count, contract_analysis.payment_details]):
+            gateway_signature = contract_analysis.gateway_client_signature if hasattr(contract_analysis, 'gateway_client_signature') else (contract_data.get('gateway_client_signature') if contract_data else None)
+            contract_payment_count = contract_analysis.contract_payment_count if hasattr(contract_analysis, 'contract_payment_count') else (contract_data.get('contract_payment_count') if contract_data else None)
+            forth_payment_count = contract_analysis.forth_payment_count if hasattr(contract_analysis, 'forth_payment_count') else (contract_data.get('forth_payment_count') if contract_data else None)
+            payment_details = contract_analysis.payment_details if hasattr(contract_analysis, 'payment_details') else (contract_data.get('payment_details') if contract_data else None)
+            
+            if any([gateway_signature, contract_payment_count, forth_payment_count, payment_details]):
                 response_parts.append("\n**Gateway Details:**")
-                if contract_analysis.gateway_client_signature:
-                    response_parts.append(f"• Gateway Signature: {contract_analysis.gateway_client_signature}")
-                if contract_analysis.contract_payment_count or contract_analysis.forth_payment_count:
-                    response_parts.append(f"• Contract Payment Count: {contract_analysis.contract_payment_count or 'Not available'}")
-                    response_parts.append(f"• Forth Payment Count: {contract_analysis.forth_payment_count or 'Not available'}")
-                if contract_analysis.payment_details:
-                    response_parts.append(f"• Payment Details: {len(contract_analysis.payment_details)} payment(s) found")
-                    for i, payment in enumerate(contract_analysis.payment_details[:3], 1):  # Show first 3 payments
+                if gateway_signature:
+                    response_parts.append(f"• Gateway Signature: {gateway_signature}")
+                if contract_payment_count or forth_payment_count:
+                    response_parts.append(f"• Contract Payment Count: {contract_payment_count or 'Not available'}")
+                    response_parts.append(f"• Forth Payment Count: {forth_payment_count or 'Not available'}")
+                if payment_details:
+                    response_parts.append(f"• Payment Details: {len(payment_details)} payment(s) found")
+                    for i, payment in enumerate(payment_details[:3], 1):  # Show first 3 payments
                         response_parts.append(f"  - Payment {i}: Amount {payment.get('amount_check', 'Unknown')}, Date {payment.get('date_check', 'Unknown')}")
                         if payment.get('contract_amount') or payment.get('forth_amount'):
                             response_parts.append(f"    Contract Amount: {payment.get('contract_amount', 'Not available')}, Forth Amount: {payment.get('forth_amount', 'Not available')}")
                         if payment.get('contract_date') or payment.get('forth_date'):
                             response_parts.append(f"    Contract Date: {payment.get('contract_date', 'Not available')}, Forth Date: {payment.get('forth_date', 'Not available')}")
-                    if len(contract_analysis.payment_details) > 3:
-                        response_parts.append(f"  - ... and {len(contract_analysis.payment_details) - 3} more payment(s)")
+                    if len(payment_details) > 3:
+                        response_parts.append(f"  - ... and {len(payment_details) - 3} more payment(s)")
     else:
         response_parts.append("**Status:** No contract data available\n")
     

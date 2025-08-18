@@ -281,7 +281,6 @@ class CombinedValidationService:
                     "gateway_client_signature": contract_data.get('gateway_client_signature'),
                     "contract_payment_count": contract_data.get('contract_payment_count'),
                     "forth_payment_count": contract_data.get('forth_payment_count'),
-                    "count_check": contract_data.get('count_check'),
                     "payment_details": contract_data.get('payment_details'),
                     "ip_check": contract_analysis.ip_check if contract_analysis else None,
                     "email_check": contract_analysis.email_check if contract_analysis else None,
@@ -366,7 +365,7 @@ class CombinedValidationService:
         Format combined hardship, budget, address, and contract analysis into a comprehensive response.
         """
         return format_combined_validation_response(
-            contact_id, hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result
+            contact_id, hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result, contract_data
         )
     
     async def validate_contact_with_prefetched_data(
