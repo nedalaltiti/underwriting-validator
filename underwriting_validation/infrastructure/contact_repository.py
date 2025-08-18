@@ -245,10 +245,12 @@ class ContactRepository:
             return 'unknown'
     
     async def check_contact_eligibility(self, contact_id: int) -> Optional[Dict[str, Any]]:
-        """Check if a contact is eligible for validation process."""
+        """Check if a contact is eligible for validation process with detailed reasons."""
         masked_id = mask_contact_id(contact_id)
         logger.debug(f"Executing eligibility check query for contact {masked_id}")
-        stmt = (
+        
+        # First, get the basic contact information
+        basic_stmt = (
             select(
                 Contact.id,
                 Contact.acctid,
@@ -262,22 +264,45 @@ class ContactRepository:
             .select_from(Contact)
             .outerjoin(ContactCategory, ContactCategory.id == Contact.c_type)
             .outerjoin(ContactLeadStatus, ContactLeadStatus.id == Contact.leadstatus)
-            .where(
-                and_(
-                    Contact.id == bindparam('contact_id'),
-                    Contact.acctid != 5783,  # Exclude specific account ID
-                    ContactCategory.title == 'Underwriting',  # Only underwriting stage
-                    Contact.del_ == False,  # Exclude deleted clients
-                    Contact.iscoapp == 0,  # Exclude co-app
-                    ContactLeadStatus.title == 'Submitted'  # Only submitted status
-                )
-            )
+            .where(Contact.id == bindparam('contact_id'))
         )
         
-        result = await self.session.execute(stmt, {"contact_id": contact_id})
+        result = await self.session.execute(basic_stmt, {"contact_id": contact_id})
         row = result.fetchone()
         
-        if row:
+        if not row:
+            logger.debug(f"Contact {masked_id} not found in database")
+            return {
+                "contact_id": contact_id,
+                "eligible": False,
+                "reason": "Contact not found in database"
+            }
+        
+        # Check each eligibility condition individually
+        reasons = []
+        
+        # Check account ID (must not be 5783)
+        if row.acctid == 5783:
+            reasons.append("Contact is in company type 5783 (excluded from validation)")
+        
+        # Check contact category (must be 'Underwriting')
+        if row.contact_category != 'Underwriting':
+            reasons.append(f"Contact is not in underwriting stage (current stage: {row.contact_category})")
+        
+        # Check if contact is deleted
+        if row.del_ == True:
+            reasons.append("Contact is marked as deleted")
+        
+        # Check if contact is co-applicant
+        if row.iscoapp == 1:
+            reasons.append("Contact is a co-applicant (excluded from validation)")
+        
+        # Check lead status (must be 'Submitted')
+        if row.contact_lead_status != 'Submitted':
+            reasons.append(f"Contact is not in submitted status (current status: {row.contact_lead_status})")
+        
+        # If all checks pass, contact is eligible
+        if not reasons:
             logger.debug(f"Contact {masked_id} eligibility check passed: category={row.contact_category}, status={row.contact_lead_status}")
             return {
                 "contact_id": row.id,
@@ -288,7 +313,22 @@ class ContactRepository:
                 "iscoapp": row.iscoapp,
                 "contact_category": row.contact_category,
                 "contact_lead_status": row.contact_lead_status,
-                "eligible": True
+                "eligible": True,
+                "reason": "Contact meets all eligibility criteria"
             }
-        logger.debug(f"Contact {masked_id} eligibility check failed: no matching records found")
-        return None 
+        
+        # Contact is not eligible
+        reason_text = "; ".join(reasons)
+        logger.debug(f"Contact {masked_id} eligibility check failed: {reason_text}")
+        return {
+            "contact_id": row.id,
+            "acctid": row.acctid,
+            "email": row.email,
+            "phone3": row.phone3,
+            "del_flag": row.del_,
+            "iscoapp": row.iscoapp,
+            "contact_category": row.contact_category,
+            "contact_lead_status": row.contact_lead_status,
+            "eligible": False,
+            "reason": reason_text
+        } 

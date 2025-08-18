@@ -50,20 +50,21 @@ class CombinedValidationService:
             masked_id = mask_contact_id(contact_id)
             logger.info(f"Checking eligibility for contact {masked_id}")
             eligibility_data = await self.repository.check_contact_eligibility(contact_id)
-            if not eligibility_data:
+            if not eligibility_data or not eligibility_data.get('eligible', False):
                 logger.warning(f"Contact {masked_id} is not eligible for validation")
+                reason = eligibility_data.get('reason', 'Contact is not eligible for validation process') if eligibility_data else 'Contact not found'
                 return {
                     "contact_id": contact_id,
                     "eligibility": "not eligible",
                     "success": False,
                     "combined_result": "not_eligible",
-                    "combined_result_reason": "Contact is not eligible for validation process",
-                    "message": "Contact does not meet eligibility criteria (category, status, or other requirements)",
-                    "eligibility_data": None,
+                    "combined_result_reason": reason,
+                    "message": f"Contact does not meet eligibility criteria: {reason}",
+                    "eligibility_data": eligibility_data,
                     "hardship_data": None,
                     "budget_data": None,
                     "address_data": None,
-                    "error": "Contact not eligible for validation"
+                    "error": reason
                 }
             
             logger.info(f"Contact {masked_id} is eligible for validation")
