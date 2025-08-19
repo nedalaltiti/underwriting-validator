@@ -27,35 +27,35 @@ def format_contract_response(analysis, contract_data) -> str:
     response_parts = [f"Contract validation for contact {masked_id}:"]
     
     # IP Address Check
-    if analysis.ip_check == "Missing Value":
+    if analysis.ip_address_validation == "Missing Value":
         response_parts.append("- IP Address Check: Missing sender or signer IP address data")
-    elif analysis.ip_check == "Match":
+    elif analysis.ip_address_validation == "Match":
         response_parts.append("- IP Address Check: PASS - Sender and signer IP addresses differ")
-    elif analysis.ip_check == "Mismatch":
+    elif analysis.ip_address_validation == "Mismatch":
         response_parts.append("- IP Address Check: FAIL - Sender and signer IP addresses are the same")
     
     # Email Check
-    if analysis.email_check == "Missing Value":
+    if analysis.email_address_validation == "Missing Value":
         response_parts.append("- Email Check: Missing Forth or contract email data")
-    elif analysis.email_check == "Match":
+    elif analysis.email_address_validation == "Match":
         response_parts.append("- Email Check: PASS - Forth email matches contract email")
-    elif analysis.email_check == "Mismatch":
+    elif analysis.email_address_validation == "Mismatch":
         response_parts.append("- Email Check: FAIL - Forth email does not match contract email")
     
     # Signature Check
-    if analysis.signature_check == "Missing Value":
+    if analysis.signature_validation == "Missing Value":
         response_parts.append("- Signature Check: Missing signature data")
-    elif analysis.signature_check == "Valid":
+    elif analysis.signature_validation == "Valid":
         response_parts.append("- Signature Check: PASS - Signatures follow Forth's requirements")
-    elif analysis.signature_check == "Invalid":
+    elif analysis.signature_validation == "Invalid":
         response_parts.append("- Signature Check: FAIL - Signatures contain invalid characters (dots/dashes)")
     
     # Bank Details Check
-    if analysis.bank_check == "Missing Value":
+    if analysis.bank_account_validation == "Missing Value":
         response_parts.append("- Bank Details Check: Missing bank data")
-    elif analysis.bank_check == "Match":
+    elif analysis.bank_account_validation == "Match":
         response_parts.append("- Bank Details Check: PASS - Bank details match between contract and Forth")
-    elif analysis.bank_check == "Mismatch":
+    elif analysis.bank_account_validation == "Mismatch":
         response_parts.append("- Bank Details Check: FAIL - Bank details do not match between contract and Forth")
     
     # Overall Result

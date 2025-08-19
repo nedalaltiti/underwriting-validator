@@ -52,20 +52,22 @@ class CombinedValidationService:
             masked_id = mask_contact_id(contact_id)
             logger.info(f"Checking eligibility for contact {masked_id}")
             eligibility_data = await self.repository.check_contact_eligibility(contact_id)
-            if not eligibility_data:
+            if not eligibility_data or not eligibility_data.get('eligible', False):
                 logger.warning(f"Contact {masked_id} is not eligible for validation")
+                reason = eligibility_data.get('reason', 'Contact is not eligible for validation process') if eligibility_data else 'Contact not found'
                 return {
                     "contact_id": contact_id,
                     "eligibility": "not eligible",
                     "success": False,
                     "combined_result": "not_eligible",
-                    "combined_result_reason": "Contact is not eligible for validation process",
-                    "message": "Contact does not meet eligibility criteria (category, status, or other requirements)",
-                    "eligibility_data": None,
+                    "combined_result_reason": reason,
+                    "message": f"Contact does not meet eligibility criteria: {reason}",
+                    "eligibility_data": eligibility_data,
                     "hardship_data": None,
                     "budget_data": None,
                     "address_data": None,
-                    "error": "Contact not eligible for validation"
+                    "contract_data": None,
+                    "error": reason
                 }
             
             logger.info(f"Contact {masked_id} is eligible for validation")
@@ -215,13 +217,28 @@ class CombinedValidationService:
                     contract_account_type=contract_data.get('contract_account_type'),
                     forth_account_type=contract_data.get('forth_account_type'),
                     contract_address=contract_data.get('contract_address'),
-                    forth_address=contract_data.get('forth_address')
+                    forth_address=contract_data.get('forth_address'),
+                    # SSN validation fields
+                    payment_gateway_agreement_client_ssn=contract_data.get('payment_gateway_agreement_client_ssn'),
+                    legal_plan_agreement_client_ssn=contract_data.get('legal_plan_agreement_client_ssn'),
+                    power_of_attorney_client_ssn=contract_data.get('power_of_attorney_client_ssn'),
+                    credit_report_ssn=contract_data.get('credit_report_ssn'),
+                    ssn_check=contract_data.get('ssn_check'),
+                    # DOB validation fields
+                    forth_dob=contract_data.get('forth_dob'),
+                    contract_dob=contract_data.get('contract_dob'),
+                    dob_check=contract_data.get('dob_check'),
+                    age_plus_18_check=contract_data.get('age_plus_18_check'),
+                    # Debts validation fields
+                    forth_debt_count=contract_data.get('forth_debt_count'),
+                    contract_debt_count=contract_data.get('contract_debt_count'),
+                    debt_count_check=contract_data.get('debt_count_check')
                 )
                 contract_result = await self.contract_service.analyze_contract_validity(contract_data_model)
                 if not contract_result.is_error():
                     contract_analysis = contract_result.value
                     contract_validation_result = contract_analysis.result.value
-                    logger.info(f"Contract analysis for contact {masked_id}: result={contract_validation_result}, ip_check={contract_analysis.ip_check}, email_check={contract_analysis.email_check}, signature_check={contract_analysis.signature_check}, bank_check={contract_analysis.bank_check}")
+                    logger.info(f"Contract analysis for contact {masked_id}: result={contract_validation_result}, ip_address_validation={contract_analysis.ip_address_validation}, email_address_validation={contract_analysis.email_address_validation}, signature_validation={contract_analysis.signature_validation}, bank_account_validation={contract_analysis.bank_account_validation}")
                 else:
                     logger.error(f"Contract analysis failed for contact {masked_id}: {contract_result.error}")
             
@@ -257,16 +274,26 @@ class CombinedValidationService:
                     "address_validation_result": address_validation_result
                 }
             
-            # Build contract data with validation outcome
+            # Build contract data with validation outcome using the new embedded pattern
             formatted_contract_data = None
-            if contract_data:
+            if contract_data and contract_analysis:
                 formatted_contract_data = {
+                    # IP Address Validation
                     "sender_ip_address": contract_data.get('sender_ip_address'),
                     "signer_ip_address": contract_data.get('signer_ip_address'),
+                    "ip_address_validation": contract_analysis.ip_address_validation,
+                    
+                    # Email Validation
                     "forth_email": contract_data.get('forth_email'),
                     "contract_email": contract_data.get('contract_email'),
+                    "email_address_validation": contract_analysis.email_address_validation,
+                    
+                    # Signature Validation
                     "client_signature": contract_data.get('client_signature'),
                     "coclient_signature": contract_data.get('coclient_signature'),
+                    "signature_validation": contract_analysis.signature_validation,
+                    
+                    # Bank Account Validation
                     "contract_account_number": contract_data.get('contract_account_number'),
                     "forth_account_number": contract_data.get('forth_account_number'),
                     "contract_routing_number": contract_data.get('contract_routing_number'),
@@ -277,25 +304,55 @@ class CombinedValidationService:
                     "forth_account_type": contract_data.get('forth_account_type'),
                     "contract_address": contract_data.get('contract_address'),
                     "forth_address": contract_data.get('forth_address'),
-                    # Gateway details
+                    "bank_account_validation": contract_analysis.bank_account_validation,
+                    
+                    # VLP (Voluntary Legal Plan) Validation
+                    "legal_plan_provider": contract_data.get('legal_plan_provider'),
+                    "vlp_client_signature": contract_data.get('vlp_client_signature'),
+                    "vlp_signature_date": contract_data.get('vlp_signature_date'),
+                    "contract_name": contract_data.get('contract_name'),
+                    "forth_name": contract_data.get('forth_name'),
+                    "vlp_name_validation": contract_analysis.vlp_name_validation,
+                    "contract_ssn": contract_data.get('contract_ssn'),
+                    "forth_ssn": contract_data.get('forth_ssn'),
+                    "legal_setup_fee_snapshot": contract_data.get('legal_setup_fee_snapshot'),
+                    "legal_monthly_fee_snapshot": contract_data.get('legal_monthly_fee_snapshot'),
+                    "legal_setup_fee_enrollment": contract_data.get('legal_setup_fee_enrollment'),
+                    "legal_monthly_fee_enrollment": contract_data.get('legal_monthly_fee_enrollment'),
+                    "vlp_fees_validation": contract_analysis.vlp_fees_validation,
+                    "payment_date": contract_data.get('payment_date'),
+                    "plan_name": contract_data.get('plan_name'),
+                    "vlp_plan_validation": contract_analysis.vlp_plan_validation,
+                    
+                    # Payment Gateway Validation
                     "gateway_client_signature": contract_data.get('gateway_client_signature'),
+                    "gateway_signature_validation": contract_analysis.gateway_signature_validation,
                     "contract_payment_count": contract_data.get('contract_payment_count'),
                     "forth_payment_count": contract_data.get('forth_payment_count'),
+                    "payment_count_validation": contract_analysis.payment_count_validation,
                     "payment_details": contract_data.get('payment_details'),
-                    "ip_check": contract_analysis.ip_check if contract_analysis else None,
-                    "email_check": contract_analysis.email_check if contract_analysis else None,
-                    "signature_check": contract_analysis.signature_check if contract_analysis else None,
-                    "bank_check": contract_analysis.bank_check if contract_analysis else None,
-                    "name_check": contract_analysis.name_check if contract_analysis else None,
-                    "ssn_check": contract_analysis.ssn_check if contract_analysis else None,
-                    "dob_check": contract_analysis.dob_check if contract_analysis else None,
-                    "fees_check": contract_analysis.fees_check if contract_analysis else None,
-                    "plan_check": contract_analysis.plan_check if contract_analysis else None,
-                    # Gateway validation results
-                    "gateway_signature_check": contract_analysis.gateway_signature_check if contract_analysis else None,
-                    "payment_count_check": contract_analysis.payment_count_check if contract_analysis else None,
-                    "payment_amounts_check": contract_analysis.payment_amounts_check if contract_analysis else None,
-                    "payment_dates_check": contract_analysis.payment_dates_check if contract_analysis else None,
+                    "payment_amounts_validation": contract_analysis.payment_amounts_validation,
+                    "payment_dates_validation": contract_analysis.payment_dates_validation,
+                    
+                    # SSN Validation
+                    "payment_gateway_agreement_client_ssn": contract_data.get('payment_gateway_agreement_client_ssn'),
+                    "legal_plan_agreement_client_ssn": contract_data.get('legal_plan_agreement_client_ssn'),
+                    "power_of_attorney_client_ssn": contract_data.get('power_of_attorney_client_ssn'),
+                    "credit_report_ssn": contract_data.get('credit_report_ssn'),
+                    "ssn_consistency_validation": contract_analysis.ssn_consistency_validation,
+                    
+                    # Date of Birth Validation
+                    "forth_dob": contract_data.get('forth_dob'),
+                    "contract_dob": contract_data.get('contract_dob'),
+                    "dob_consistency_validation": contract_analysis.dob_consistency_validation,
+                    "age_eligibility_validation": contract_analysis.age_eligibility_validation,
+                    
+                    # Debts Validation
+                    "forth_debt_count": contract_data.get('forth_debt_count'),
+                    "contract_debt_count": contract_data.get('contract_debt_count'),
+                    "debt_count_validation": contract_analysis.debt_count_validation,
+                    
+                    # Overall Contract Validation Result
                     "contract_validation_result": contract_validation_result
                 }
             

@@ -133,19 +133,19 @@ class CombinedResultAnalyzer:
             )
         elif validation_type == "contract":
             result = analysis_data.get('contract_validation_result', 'no_data')
-            ip_check = analysis_data.get('ip_check', 'Unknown')
-            email_check = analysis_data.get('email_check', 'Unknown')
-            signature_check = analysis_data.get('signature_check', 'Unknown')
-            bank_check = analysis_data.get('bank_check', 'Unknown')
-            name_check = analysis_data.get('name_check', 'Unknown')
-            ssn_check = analysis_data.get('ssn_check', 'Unknown')
-            dob_check = analysis_data.get('dob_check', 'Unknown')
-            fees_check = analysis_data.get('fees_check', 'Unknown')
-            plan_check = analysis_data.get('plan_check', 'Unknown')
-            gateway_signature_check = analysis_data.get('gateway_signature_check', 'Unknown')
-            payment_count_check = analysis_data.get('payment_count_check', 'Unknown')
-            payment_amounts_check = analysis_data.get('payment_amounts_check', 'Unknown')
-            payment_dates_check = analysis_data.get('payment_dates_check', 'Unknown')
+            ip_address_validation = analysis_data.get('ip_address_validation', 'Unknown')
+            email_address_validation = analysis_data.get('email_address_validation', 'Unknown')
+            signature_validation = analysis_data.get('signature_validation', 'Unknown')
+            bank_account_validation = analysis_data.get('bank_account_validation', 'Unknown')
+            vlp_name_validation = analysis_data.get('vlp_name_validation', 'Unknown')
+            ssn_consistency_validation = analysis_data.get('ssn_consistency_validation', 'Unknown')
+            dob_consistency_validation = analysis_data.get('dob_consistency_validation', 'Unknown')
+            vlp_fees_validation = analysis_data.get('vlp_fees_validation', 'Unknown')
+            vlp_plan_validation = analysis_data.get('vlp_plan_validation', 'Unknown')
+            gateway_signature_validation = analysis_data.get('gateway_signature_validation', 'Unknown')
+            payment_count_validation = analysis_data.get('payment_count_validation', 'Unknown')
+            payment_amounts_validation = analysis_data.get('payment_amounts_validation', 'Unknown')
+            payment_dates_validation = analysis_data.get('payment_dates_validation', 'Unknown')
             if result == "no_data":
                 return ValidationResult(
                     type="contract",
@@ -155,7 +155,7 @@ class CombinedResultAnalyzer:
             return ValidationResult(
                 type="contract",
                 result=result,
-                reason=f"IP: {ip_check}, Email: {email_check}, Signature: {signature_check}, Bank: {bank_check}, VLP Name: {name_check}, VLP SSN: {ssn_check}, VLP DOB: {dob_check}, VLP Fees: {fees_check}, VLP Plan: {plan_check}, Gateway Sig: {gateway_signature_check}, Payment Count: {payment_count_check}, Payment Amounts: {payment_amounts_check}, Payment Dates: {payment_dates_check}"
+                reason=f"IP: {ip_address_validation}, Email: {email_address_validation}, Signature: {signature_validation}, Bank: {bank_account_validation}, VLP Name: {vlp_name_validation}, SSN: {ssn_consistency_validation}, DOB: {dob_consistency_validation}, VLP Fees: {vlp_fees_validation}, VLP Plan: {vlp_plan_validation}, Gateway Sig: {gateway_signature_validation}, Payment Count: {payment_count_validation}, Payment Amounts: {payment_amounts_validation}, Payment Dates: {payment_dates_validation}"
             )
         
         return None

@@ -109,6 +109,7 @@ class PaymentGatewayAgreement:
     file_id = Column(Numeric,primary_key=True, autoincrement=True)
     client_state = Column(String(255), nullable=True)
     client_signature = Column(String(255), nullable=True)
+    client_ssn = Column(String(255), nullable=True)
 
 @public_mapper.mapped
 class EngagementTerm:
@@ -230,3 +231,48 @@ class PaymentGatewayDepositSchedule:
     payment_no = Column(String(255), nullable=True)
     amount = Column(Numeric, nullable=True)
     process_date = Column(Date, nullable=True)
+
+# Additional contract validation models
+@public_mapper.mapped
+class PowerOfAttorney:
+    __tablename__ = "power_of_attorney"
+    __table_args__ = {"schema": "underwriting"}
+
+    file_id = Column(Numeric, primary_key=True, autoincrement=True)
+    client_ssn = Column(String(255), nullable=True)
+
+@public_mapper.mapped
+class DebtSchedule:
+    __tablename__ = "debt_schedule"
+    __table_args__ = {"schema": "underwriting"}
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    file_id = Column(BigInteger, nullable=True)
+
+@public_mapper.mapped
+class Debt:
+    __tablename__ = "debts"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Numeric, primary_key=True, autoincrement=True)
+    contact_id = Column(Numeric, ForeignKey("public.contacts.id"), nullable=False)
+    enrolled = Column(Numeric, nullable=True)
+
+# Credit report models
+@public_mapper.mapped
+class CreditReport:
+    __tablename__ = "credit_reports"
+    __table_args__ = {"schema": "creditreport_parsing"}
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    filename = Column(String(255), nullable=True)
+
+@public_mapper.mapped
+class Applicant:
+    __tablename__ = "applicants"
+    __table_args__ = {"schema": "creditreport_parsing"}
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    credit_report_id = Column(BigInteger, ForeignKey("creditreport_parsing.credit_reports.id"), nullable=False)
+    ssn = Column(String(255), nullable=True)
+    date_of_birth = Column(Date, nullable=True)
