@@ -9,6 +9,7 @@ separation of concerns.
 import logging
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 
 from underwriting_validation.infrastructure.contract_ip_repository import ContractIPRepository
 from underwriting_validation.infrastructure.contract_email_repository import ContractEmailRepository
@@ -42,17 +43,61 @@ class ContractRepository:
         logger.info("ContractRepository initialized with specialized repositories")
     
     async def fetch_contact_with_contract_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
-        """Fetch contact with contract validation data using multiple specialized repositories."""
-        # Fetch data from all specialized repositories
-        ip_data = await self.ip_repo.fetch_contract_ip_data(contact_id)
-        email_data = await self.email_repo.fetch_contract_email_data(contact_id)
-        signature_data = await self.signature_repo.fetch_contract_signature_data(contact_id)
-        bank_data = await self.bank_repo.fetch_contract_bank_data(contact_id)
-        vlp_data = await self.vlp_repo.fetch_contract_vlp_data(contact_id)
-        gateway_data = await self.gateway_repo.fetch_contract_gateway_data(contact_id)
-        ssn_data = await self.ssn_repo.fetch_contract_ssn_data(contact_id)
-        dob_data = await self.dob_repo.fetch_contract_dob_data(contact_id)
-        debts_data = await self.debts_repo.fetch_contract_debts_data(contact_id)
+        """Fetch contact with contract validation data using sequential queries for now."""
+        # Fetch data from all specialized repositories sequentially to avoid connection pool issues
+        try:
+            ip_data = await self.ip_repo.fetch_contract_ip_data(contact_id)
+        except Exception as e:
+            logger.error(f"IP data fetch failed for contact {contact_id}: {e}")
+            ip_data = None
+            
+        try:
+            email_data = await self.email_repo.fetch_contract_email_data(contact_id)
+        except Exception as e:
+            logger.error(f"Email data fetch failed for contact {contact_id}: {e}")
+            email_data = None
+            
+        try:
+            signature_data = await self.signature_repo.fetch_contract_signature_data(contact_id)
+        except Exception as e:
+            logger.error(f"Signature data fetch failed for contact {contact_id}: {e}")
+            signature_data = None
+            
+        try:
+            bank_data = await self.bank_repo.fetch_contract_bank_data(contact_id)
+        except Exception as e:
+            logger.error(f"Bank data fetch failed for contact {contact_id}: {e}")
+            bank_data = None
+            
+        try:
+            vlp_data = await self.vlp_repo.fetch_contract_vlp_data(contact_id)
+        except Exception as e:
+            logger.error(f"VLP data fetch failed for contact {contact_id}: {e}")
+            vlp_data = None
+            
+        try:
+            gateway_data = await self.gateway_repo.fetch_contract_gateway_data(contact_id)
+        except Exception as e:
+            logger.error(f"Gateway data fetch failed for contact {contact_id}: {e}")
+            gateway_data = None
+            
+        try:
+            ssn_data = await self.ssn_repo.fetch_contract_ssn_data(contact_id)
+        except Exception as e:
+            logger.error(f"SSN data fetch failed for contact {contact_id}: {e}")
+            ssn_data = None
+            
+        try:
+            dob_data = await self.dob_repo.fetch_contract_dob_data(contact_id)
+        except Exception as e:
+            logger.error(f"DOB data fetch failed for contact {contact_id}: {e}")
+            dob_data = None
+            
+        try:
+            debts_data = await self.debts_repo.fetch_contract_debts_data(contact_id)
+        except Exception as e:
+            logger.error(f"Debts data fetch failed for contact {contact_id}: {e}")
+            debts_data = None
         
         # Combine all data
         if ip_data or email_data or signature_data or bank_data or vlp_data or gateway_data or ssn_data or dob_data or debts_data:

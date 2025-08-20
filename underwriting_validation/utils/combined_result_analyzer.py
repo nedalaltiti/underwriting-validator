@@ -32,7 +32,8 @@ class CombinedResultAnalyzer:
         address_analysis: Optional[Dict[str, Any]] = None,
         contract_analysis: Optional[Dict[str, Any]] = None,
         duplication_analysis: Optional[Dict[str, Any]] = None,
-        draft_analysis: Optional[Dict[str, Any]] = None
+        draft_analysis: Optional[Dict[str, Any]] = None,
+        credit_score_analysis: Optional[Dict[str, Any]] = None
     ) -> tuple[str, str]:
         """
         Analyze combined validation results and determine overall result with reasoning.
@@ -53,13 +54,14 @@ class CombinedResultAnalyzer:
         contract_result = self._extract_validation_result('contract', contract_analysis)
         duplication_result = self._extract_validation_result('duplication', duplication_analysis)
         draft_result = self._extract_validation_result('draft', draft_analysis)
+        credit_score_result = self._extract_validation_result('credit_score', credit_score_analysis)
         
         # Get available validations
-        available_validations = [r for r in [hardship_result, budget_result, address_result, contract_result, duplication_result, draft_result] if r is not None]
+        available_validations = [r for r in [hardship_result, budget_result, address_result, contract_result, duplication_result, draft_result, credit_score_result] if r is not None]
         
         # If no data for any validation
         if not available_validations:
-            return "no_data", "No validation data available for any category (hardship, budget, address, contract, duplication, or draft)"
+            return "no_data", "No validation data available for any category (hardship, budget, address, contract, duplication, draft, or credit score)"
         
         # Check if any validation returned "not_eligible"
         not_eligible_validations = [v for v in available_validations if v.result == "not_eligible"]
@@ -193,6 +195,21 @@ class CombinedResultAnalyzer:
                 type="draft",
                 result=result,
                 reason=f"Payment validation: {months_over_250}/{months_with_data} months meet $250 minimum (Avg: ${average_monthly_payment:,.2f})"
+            )
+        elif validation_type == "credit_score":
+            result = analysis_data.get('credit_score_validation_result', 'no_data')
+            credit_score = analysis_data.get('credit_score', 0)
+            credit_score_status = analysis_data.get('credit_score_status', 'unknown')
+            if result == "no_data":
+                return ValidationResult(
+                    type="credit_score",
+                    result="no_data",
+                    reason="No credit score data available"
+                )
+            return ValidationResult(
+                type="credit_score",
+                result=result,
+                reason=f"Credit score: {credit_score} ({credit_score_status})"
             )
         
         return None

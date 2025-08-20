@@ -25,6 +25,7 @@ class ContactValidationRequest(BaseModel):
     include_budget: bool = Field(default=True, description="Include budget validation")
     include_hardship: bool = Field(default=True, description="Include hardship validation")
     include_address: bool = Field(default=True, description="Include address validation")
+    include_credit_score: bool = Field(default=True, description="Include credit score validation")
 
 class ContactValidationResponse(BaseModel):
     """Response model for contact validation."""
@@ -51,6 +52,7 @@ class CombinedValidationResponse(BaseModel):
     hardship_data: Optional[Dict[str, Any]] = None
     budget_data: Optional[Dict[str, Any]] = None
     address_data: Optional[Dict[str, Any]] = None
+    credit_score_data: Optional[Dict[str, Any]] = None
     contract_data: Optional[Dict[str, Any]] = None
     duplication_data: Optional[Dict[str, Any]] = None
     draft_data: Optional[Dict[str, Any]] = None
@@ -66,9 +68,9 @@ async def validate_contact(
     contact_service: ContactService = Depends(get_contact_validation_uc)
 ):
     """
-    Validate a contact for hardship, budget, and/or address information.
+    Validate a contact for hardship, budget, address, and/or credit score information.
     
-    This endpoint provides a robust validation of a contact's hardship, budget, and address data.
+    This endpoint provides a robust validation of a contact's hardship, budget, address, and credit score data.
     """
     try:
         masked_id = mask_contact_id(req.contact_id)
@@ -81,6 +83,7 @@ async def validate_contact(
         hardship_data = None
         budget_data = None
         address_data = None
+        credit_score_data = None
         
         if req.include_hardship:
             hardship_data = await contact_service.analyze_contact_hardship(req.contact_id)
@@ -91,8 +94,11 @@ async def validate_contact(
         if req.include_address:
             address_data = await contact_service.analyze_contact_address(req.contact_id)
         
+        if req.include_credit_score:
+            credit_score_data = await contact_service.analyze_contact_credit_score(req.contact_id)
+        
         # Combine the data
-        contact_data = hardship_data or budget_data or address_data
+        contact_data = hardship_data or budget_data or address_data or credit_score_data
         
         if not contact_data:
             return ContactValidationResponse(
@@ -109,16 +115,20 @@ async def validate_contact(
         combined_data = {}
         
         if hardship_data:
-            response_parts.append(contact_service.format_contact_response(hardship_data))
+            response_parts.append(await contact_service.format_contact_response(hardship_data))
             combined_data["hardship"] = hardship_data
         
         if budget_data:
-            response_parts.append(contact_service.format_budget_response(budget_data))
+            response_parts.append(await contact_service.format_budget_response(budget_data))
             combined_data["budget"] = budget_data
         
         if address_data:
-            response_parts.append(contact_service.format_address_response(address_data))
+            response_parts.append(await contact_service.format_address_response(address_data))
             combined_data["address"] = address_data
+        
+        if credit_score_data:
+            response_parts.append(await contact_service.format_credit_score_response(credit_score_data))
+            combined_data["credit_score"] = credit_score_data
         
         if not response_parts:
             formatted_response = "No validation data available for this contact"
@@ -206,6 +216,7 @@ async def validate_contact_combined(
             contract_data=result.get("contract_data"),
             duplication_data=result.get("duplication_data"),
             draft_data=result.get("draft_data"),
+            credit_score_data=result.get("credit_score_data"),
             error=result.get("error")
         )
         
@@ -228,6 +239,7 @@ async def validate_contact_combined(
             contract_data=None,
             duplication_data=None,
             draft_data=None,
+            credit_score_data=None,
             error=str(e)
         )
 
@@ -239,9 +251,9 @@ async def get_contact_info(
     contact_service: ContactService = Depends(get_contact_validation_uc)
 ):
     """
-    Get basic contact information with hardship, budget, and address data availability.
+    Get basic contact information with hardship, budget, address, and credit score data availability.
     
-    This endpoint provides basic contact lookup to check if hardship, budget, and address
+    This endpoint provides basic contact lookup to check if hardship, budget, address, and credit score
     data are available for a contact, without performing validation analysis.
     """
     try:
@@ -260,7 +272,10 @@ async def get_contact_info(
         # Get raw address data (without analysis)
         address_data = await contact_service.get_contact_with_address_data(contact_id)
         
-        if not hardship_data and not budget_data and not address_data:
+        # Get raw credit score data (without analysis)
+        credit_score_data = await contact_service.repository.fetch_contact_with_credit_score_data(contact_id)
+        
+        if not hardship_data and not budget_data and not address_data and not credit_score_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Contact {contact_id} not found"
@@ -282,17 +297,21 @@ async def get_contact_info(
             address_data.get('assigned_company')
         ])
         
+        has_credit_score_data = credit_score_data and credit_score_data.get('has_credit_data', False)
+        
         return {
             "contact_id": contact_id,
             "success": True,
             "data_available": {
                 "hardship": has_hardship_data,
                 "budget": has_budget_data,
-                "address": has_address_data
+                "address": has_address_data,
+                "credit_score": has_credit_score_data
             },
             "hardship_data": hardship_data if has_hardship_data else None,
             "budget_data": budget_data if has_budget_data else None,
-            "address_data": address_data if has_address_data else None
+            "address_data": address_data if has_address_data else None,
+            "credit_score_data": credit_score_data if has_credit_score_data else None
         }
         
     except HTTPException:
@@ -303,4 +322,61 @@ async def get_contact_info(
         raise HTTPException(
             status_code=500,
             detail=f"An error occurred while retrieving contact information: {str(e)}"
+        )
+
+
+@router.post("/credit-score", 
+    response_model=ContactValidationResponse
+)
+@limiter.limit("5/60s")
+async def validate_credit_score(
+    request: Request,
+    req: ContactValidationRequest,
+    contact_service: ContactService = Depends(get_contact_validation_uc)
+):
+    """
+    Validate a contact's credit score information.
+    
+    This endpoint provides credit score validation for a contact, checking if the credit score
+    meets minimum requirements (500) or if credit score data is missing.
+    """
+    try:
+        masked_id = mask_contact_id(req.contact_id)
+        logger.info(f"Validating credit score for contact {masked_id}")
+        
+        # Get credit score data
+        credit_score_data = await contact_service.analyze_contact_credit_score(req.contact_id)
+        
+        if not credit_score_data:
+            return ContactValidationResponse(
+                contact_id=req.contact_id,
+                success=False,
+                message="No credit score data found for this contact",
+                validation_type="credit_score",
+                data=None,
+                error="No credit score data available"
+            )
+        
+        # Format the response
+        formatted_response = await contact_service.format_credit_score_response(credit_score_data)
+        
+        return ContactValidationResponse(
+            contact_id=req.contact_id,
+            success=True,
+            message=formatted_response,
+            validation_type="credit_score",
+            data={"credit_score": credit_score_data}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        masked_id = mask_contact_id(req.contact_id)
+        logger.error(f"Error validating credit score for contact {masked_id}: {e}")
+        return ContactValidationResponse(
+            contact_id=req.contact_id,
+            success=False,
+            message="An error occurred during credit score validation",
+            validation_type="credit_score",
+            error=str(e)
         )

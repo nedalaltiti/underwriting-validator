@@ -18,6 +18,7 @@ from underwriting_validation.infrastructure.eligibility_repository import Eligib
 from underwriting_validation.infrastructure.contract_repository import ContractRepository
 from underwriting_validation.infrastructure.duplication_repository import DuplicationRepository
 from underwriting_validation.infrastructure.draft_repository import DraftRepository
+from underwriting_validation.infrastructure.credit_score_repository import CreditScoreRepository
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class ContactRepository:
         self.contract_repo = ContractRepository(session)
         self.duplication_repo = DuplicationRepository(session)
         self.draft_repo = DraftRepository(session)
+        self.credit_score_repo = CreditScoreRepository(session)
         
         logger.info("ContactRepository initialized with specialized repositories")
     
@@ -62,6 +64,11 @@ class ContactRepository:
     async def fetch_contact_with_address_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
         """Fetch contact with address validation data using the provided SQL query."""
         return await self.address_repo.fetch_contact_with_address_data(contact_id)
+    
+    # Credit Score operations
+    async def fetch_contact_with_credit_score_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
+        """Fetch contact with credit score validation data using the provided SQL query."""
+        return await self.credit_score_repo.fetch_contact_with_credit_score_data(contact_id)
     
     # Eligibility operations
     async def check_contact_eligibility(self, contact_id: int) -> Optional[Dict[str, Any]]:

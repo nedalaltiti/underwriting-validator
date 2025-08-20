@@ -7,7 +7,7 @@ This module contains formatting functions specifically for address validation re
 from typing import Dict, Any
 
 
-def format_address_response(analysis: Any, address_data: Any) -> str:
+async def format_address_response(analysis: Any, address_data: Any) -> str:
     """Format address analysis into a user-friendly response."""
     contact_id = address_data.contact_id
     
@@ -38,7 +38,7 @@ def format_address_response(analysis: Any, address_data: Any) -> str:
     return "\n".join(response_parts)
 
 
-def format_address_analysis_response(address: Dict[str, Any]) -> str:
+async def format_address_analysis_response(address: Dict[str, Any]) -> str:
     """Format address analysis results into a user-friendly response."""
     if not address:
         return "No address data found for that contact ID."

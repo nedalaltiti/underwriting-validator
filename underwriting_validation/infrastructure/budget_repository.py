@@ -54,10 +54,7 @@ class BudgetRepository:
                     or_(
                         Contact.del_.is_(null()),
                         Contact.del_ != True
-                    ),
-                    # Additional filters from environment variables
-                    # Base conditions are already checked by eligibility check
-                    Contact.id == bindparam('contact_id')
+                    )
                 )
             )
             .group_by(

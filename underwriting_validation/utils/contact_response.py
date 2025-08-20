@@ -10,7 +10,7 @@ This module provides utilities for contact response formatting including:
 from typing import Dict, Any
 
 
-def format_contact_response(contact: Dict[str, Any]) -> str:
+async def format_contact_response(contact: Dict[str, Any]) -> str:
     """
     Format hardship analysis results into a user-friendly response.
     
@@ -21,10 +21,10 @@ def format_contact_response(contact: Dict[str, Any]) -> str:
         Formatted string response
     """
     from underwriting_validation.utils.validation_responses import format_contact_response
-    return format_contact_response(contact)
+    return await format_contact_response(contact)
 
 
-def format_budget_response(budget: Dict[str, Any]) -> str:
+async def format_budget_response(budget: Dict[str, Any]) -> str:
     """
     Format budget analysis results into a user-friendly response.
     
@@ -44,10 +44,10 @@ def format_budget_response(budget: Dict[str, Any]) -> str:
     
     # Use the budget analysis response formatter
     from underwriting_validation.utils.validation_responses import format_budget_analysis_response
-    return format_budget_analysis_response(budget)
+    return await format_budget_analysis_response(budget)
 
 
-def format_address_response(address: Dict[str, Any]) -> str:
+async def format_address_response(address: Dict[str, Any]) -> str:
     """
     Format address analysis results into a user-friendly response.
     
@@ -67,10 +67,10 @@ def format_address_response(address: Dict[str, Any]) -> str:
     
     # Use the address analysis response formatter
     from underwriting_validation.utils.validation_responses import format_address_analysis_response
-    return format_address_analysis_response(address)
+    return await format_address_analysis_response(address)
 
 
-def format_combined_validation_response(
+async def format_combined_validation_response(
     contact_id: int,
     hardship_data: Dict[str, Any],
     budget_data: Dict[str, Any],
@@ -97,13 +97,13 @@ def format_combined_validation_response(
         Formatted string response
     """
     from underwriting_validation.utils.validation_responses import format_combined_validation_response
-    return format_combined_validation_response(
+    return await format_combined_validation_response(
         contact_id, hardship_data, budget_data, address_data,
         hardship_analysis, budget_analysis, address_analysis, combined_result
     )
 
 
-def format_error_response(contact_id: int, error_message: str, validation_type: str = "validation") -> str:
+async def format_error_response(contact_id: int, error_message: str, validation_type: str = "validation") -> str:
     """
     Format error response for contact operations.
     
@@ -116,10 +116,10 @@ def format_error_response(contact_id: int, error_message: str, validation_type: 
         Formatted error response
     """
     from underwriting_validation.utils.validation_responses import format_error_response
-    return format_error_response(contact_id, error_message, validation_type)
+    return await format_error_response(contact_id, error_message, validation_type)
 
 
-def format_no_data_response(contact_id: int, validation_type: str = "validation") -> str:
+async def format_no_data_response(contact_id: int, validation_type: str = "validation") -> str:
     """
     Format no data response for contact operations.
     
@@ -131,4 +131,4 @@ def format_no_data_response(contact_id: int, validation_type: str = "validation"
         Formatted no data response
     """
     from underwriting_validation.utils.validation_responses import format_no_data_response
-    return format_no_data_response(contact_id, validation_type)
+    return await format_no_data_response(contact_id, validation_type)

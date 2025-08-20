@@ -207,7 +207,7 @@ class ContractBankValidationService:
             logger.error(f"Error analyzing bank validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_bank_response(self, analysis: BankValidationAnalysis) -> str:
+    async def format_bank_response(self, analysis: BankValidationAnalysis) -> str:
         """Format the bank analysis into a user-friendly response."""
         if analysis.bank_check == BankValidationResult.MATCH:
             return f"✅ Bank validation passed: Contract and Forth bank details match"

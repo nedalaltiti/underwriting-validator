@@ -84,62 +84,72 @@ class ValidationResponseFormatter:
     """Legacy formatter class for backward compatibility."""
     
     @staticmethod
-    def format_hardship_response(analysis, hardship_data):
-        return format_hardship_response(analysis, hardship_data)
+    async def format_hardship_response(analysis, hardship_data):
+        return await format_hardship_response(analysis, hardship_data)
     
     @staticmethod
-    def format_budget_response(analysis, budget_data):
-        return format_budget_response(analysis, budget_data)
+    async def format_budget_response(analysis, budget_data):
+        return await format_budget_response(analysis, budget_data)
     
     @staticmethod
-    def format_address_response(analysis, address_data):
-        return format_address_response(analysis, address_data)
+    async def format_address_response(analysis, address_data):
+        return await format_address_response(analysis, address_data)
     
     @staticmethod
-    def format_contract_response(analysis, contract_data):
-        return format_contract_response(analysis, contract_data)
+    async def format_contract_response(analysis, contract_data):
+        return await format_contract_response(analysis, contract_data)
     
     @staticmethod
-    def format_draft_response(analysis, draft_data):
-        return format_draft_response(analysis, draft_data)
+    async def format_draft_response(analysis, draft_data):
+        return await format_draft_response(analysis, draft_data)
     
     @staticmethod
-    def format_contact_response(contact):
-        return format_contact_response(contact)
+    async def format_contact_response(contact):
+        return await format_contact_response(contact)
     
     @staticmethod
-    def format_budget_analysis_response(budget):
-        return format_budget_analysis_response(budget)
+    async def format_budget_analysis_response(budget):
+        return await format_budget_analysis_response(budget)
     
     @staticmethod
-    def format_address_analysis_response(address):
-        return format_address_analysis_response(address)
+    async def format_address_analysis_response(address):
+        return await format_address_analysis_response(address)
     
     @staticmethod
-    def format_contract_analysis_response(contract):
-        return format_contract_analysis_response(contract)
+    async def format_contract_analysis_response(contract):
+        return await format_contract_analysis_response(contract)
     
     @staticmethod
-    def format_combined_validation_response(
+    async def format_combined_validation_response(
         contact_id, hardship_data, budget_data, address_data,
         hardship_analysis, budget_analysis, address_analysis, combined_result
     ):
-        return format_combined_validation_response(
+        return await format_combined_validation_response(
             contact_id, hardship_data, budget_data, address_data,
             hardship_analysis, budget_analysis, address_analysis, combined_result
         )
     
     @staticmethod
-    def format_no_data_response(contact_id, validation_type="validation"):
-        return format_no_data_response(contact_id, validation_type)
+    async def format_no_data_response(contact_id, validation_type="validation"):
+        return await format_no_data_response(contact_id, validation_type)
     
     @staticmethod
-    def format_error_response(contact_id, error_message, validation_type="validation"):
-        return format_error_response(contact_id, error_message, validation_type)
+    async def format_error_response(contact_id, error_message, validation_type="validation"):
+        return await format_error_response(contact_id, error_message, validation_type)
     
     @staticmethod
-    def format_invalid_contact_id_response(contact_id):
-        return format_invalid_contact_id_response(contact_id)
+    async def format_invalid_contact_id_response(contact_id):
+        return await format_invalid_contact_id_response(contact_id)
+    
+    @staticmethod
+    async def format_credit_score_response(analysis, credit_score_data):
+        from underwriting_validation.utils.credit_score_responses import format_credit_score_response
+        return await format_credit_score_response(analysis, credit_score_data)
+    
+    @staticmethod
+    async def format_credit_score_analysis_response(credit_score):
+        from underwriting_validation.utils.credit_score_responses import format_credit_score_analysis_response
+        return await format_credit_score_analysis_response(credit_score)
 
 
 

@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional
 from underwriting_validation.utils.pii_filter import mask_contact_id
 
 
-def format_contract_response(analysis, contract_data) -> str:
+async def format_contract_response(analysis, contract_data) -> str:
     """
     Format contract validation analysis into a user-friendly response.
     
@@ -69,7 +69,7 @@ def format_contract_response(analysis, contract_data) -> str:
     return "\n".join(response_parts)
 
 
-def format_contract_analysis_response(contract_data: Dict[str, Any]) -> str:
+async def format_contract_analysis_response(contract_data: Dict[str, Any]) -> str:
     """
     Format contract data into a user-friendly response.
     

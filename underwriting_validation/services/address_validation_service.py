@@ -151,7 +151,7 @@ class AddressValidationService:
             logger.error(f"Error analyzing address validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_address_response(self, analysis: AddressAnalysis, address_data: AddressDataIn) -> str:
+    async def format_address_response(self, analysis: AddressAnalysis, address_data: AddressDataIn) -> str:
         """Format the address analysis into a user-friendly response."""
         from underwriting_validation.utils.validation_responses import format_address_response
-        return format_address_response(analysis, address_data)
+        return await format_address_response(analysis, address_data)

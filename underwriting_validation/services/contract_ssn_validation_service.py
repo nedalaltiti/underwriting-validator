@@ -98,7 +98,7 @@ class ContractSSNValidationService:
             logger.error(f"Error analyzing SSN validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_ssn_response(self, analysis: SSNValidationAnalysis) -> str:
+    async def format_ssn_response(self, analysis: SSNValidationAnalysis) -> str:
         """Format the SSN analysis into a user-friendly response."""
         if analysis.ssn_check == SSNValidationResult.MATCH:
             return f"✅ SSN validation passed: All SSN sources match"

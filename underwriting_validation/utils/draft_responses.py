@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from .pii_filter import mask_contact_id
 
 
-def format_draft_response(analysis, draft_data) -> str:
+async def format_draft_response(analysis, draft_data) -> str:
     """
     Format draft analysis into a user-friendly response.
     
@@ -39,7 +39,7 @@ def format_draft_response(analysis, draft_data) -> str:
         )
 
 
-def format_draft_analysis_response(analysis, draft_data) -> Dict[str, Any]:
+async def format_draft_analysis_response(analysis, draft_data) -> Dict[str, Any]:
     """
     Format draft analysis into a structured response dictionary.
     
@@ -72,5 +72,5 @@ def format_draft_analysis_response(analysis, draft_data) -> Dict[str, Any]:
             "average_monthly_payment": analysis.average_monthly_payment,
             "minimum_monthly_payment": analysis.minimum_monthly_payment
         },
-        "message": format_draft_response(analysis, draft_data)
+        "message": await format_draft_response(analysis, draft_data)
     }

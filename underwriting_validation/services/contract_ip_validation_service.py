@@ -94,7 +94,7 @@ class ContractIPValidationService:
             logger.error(f"Error analyzing IP validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_ip_response(self, analysis: IPValidationAnalysis) -> str:
+    async def format_ip_response(self, analysis: IPValidationAnalysis) -> str:
         """Format the IP analysis into a user-friendly response."""
         if analysis.ip_check == IPValidationResult.MATCH:
             return f"✅ IP validation passed: Sender and signer IP addresses are different"

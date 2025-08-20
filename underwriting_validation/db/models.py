@@ -276,3 +276,15 @@ class Applicant:
     credit_report_id = Column(BigInteger, ForeignKey("creditreport_parsing.credit_reports.id"), nullable=False)
     ssn = Column(String(255), nullable=True)
     date_of_birth = Column(Date, nullable=True)
+
+# Credit score model
+@public_mapper.mapped
+class CreditScores:
+    __tablename__ = "credit_scores"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Numeric, primary_key=True, autoincrement=True)
+    contact_id = Column(Numeric, ForeignKey("public.contacts.id"), nullable=False)
+    equifax = Column(Numeric, nullable=True)
+    experian = Column(Numeric, nullable=True)
+    transunion = Column(Numeric, nullable=True)

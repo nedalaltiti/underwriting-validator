@@ -7,7 +7,7 @@ This module contains formatting functions specifically for budget validation res
 from typing import Dict, Any
 
 
-def format_budget_response(analysis: Any, budget_data: Any) -> str:
+async def format_budget_response(analysis: Any, budget_data: Any) -> str:
     """Format budget analysis into a user-friendly response."""
     contact_id = budget_data.contact_id
     
@@ -39,7 +39,7 @@ def format_budget_response(analysis: Any, budget_data: Any) -> str:
     return "\n".join(response_parts)
 
 
-def format_budget_analysis_response(budget: Dict[str, Any]) -> str:
+async def format_budget_analysis_response(budget: Dict[str, Any]) -> str:
     """Format budget analysis results into a user-friendly response."""
     if not budget:
         return "No budget data found for that contact ID."

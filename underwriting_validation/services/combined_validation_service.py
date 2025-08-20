@@ -13,6 +13,7 @@ from underwriting_validation.services.address_validation_service import AddressV
 from underwriting_validation.services.contract_validation_service import ContractValidationService
 from underwriting_validation.services.duplication_validation_service import DuplicationValidationService
 from underwriting_validation.services.draft_validation_service import DraftValidationService
+from underwriting_validation.services.credit_score_validation_service import CreditScoreValidationService
 from underwriting_validation.infrastructure.contact_repository import ContactRepository
 from underwriting_validation.utils.validation_responses import format_error_response, format_no_data_response, format_combined_validation_response
 from underwriting_validation.utils.combined_result_analyzer import CombinedResultAnalyzer
@@ -32,8 +33,9 @@ class CombinedValidationService:
         budget_service: BudgetValidationService, 
         address_service: AddressValidationService, 
         contract_service: ContractValidationService, 
-        duplication_service: DuplicationValidationService, 
+        duplication_service: Optional[DuplicationValidationService], 
         draft_service: DraftValidationService,
+        credit_score_service: CreditScoreValidationService,
         repository: ContactRepository
     ):
         self.repository = repository
@@ -42,7 +44,7 @@ class CombinedValidationService:
         # Initialize specialized components
         self.data_fetcher = DataFetcher(repository)
         self.analysis_orchestrator = AnalysisOrchestrator(
-            hardship_service, budget_service, address_service, contract_service, duplication_service, draft_service
+            hardship_service, budget_service, address_service, contract_service, duplication_service, draft_service, credit_score_service
         )
         self.response_formatter = ResponseFormatter()
         
@@ -76,13 +78,13 @@ class CombinedValidationService:
             logger.info(f"Contact {masked_id} is eligible for validation")
             
             # Fetch all data in parallel using the data fetcher
-            hardship_data, budget_data, address_data, contract_data, duplication_data, draft_data = await self.data_fetcher.fetch_all_validation_data(
+            hardship_data, budget_data, address_data, contract_data, duplication_data, draft_data, credit_score_data = await self.data_fetcher.fetch_all_validation_data(
                 contact_id, hardship_data
             )
             
             # Check data availability using the data fetcher
             data_availability = self.data_fetcher.check_data_availability(
-                hardship_data, budget_data, address_data, contract_data, duplication_data, draft_data
+                hardship_data, budget_data, address_data, contract_data, duplication_data, draft_data, credit_score_data
             )
             
             # Check if we have any data at all
@@ -91,15 +93,17 @@ class CombinedValidationService:
                 return self._create_no_data_response(contact_id, eligibility_data)
             
             # Run all LLM analyses in parallel using the analysis orchestrator
-            hardship_analysis, budget_analysis, address_analysis, contract_analysis, duplication_analysis, draft_analysis = await self.analysis_orchestrator.run_parallel_analyses(
-                contact_id, hardship_data, budget_data, address_data, contract_data, duplication_data, draft_data, data_availability
+            hardship_analysis, budget_analysis, address_analysis, contract_analysis, duplication_analysis, draft_analysis, credit_score_analysis = await self.analysis_orchestrator.run_parallel_analyses(
+                contact_id, hardship_data, budget_data, address_data, contract_data, duplication_data, draft_data, credit_score_data, data_availability
             )
             
             # Format all data using the response formatter
             formatted_hardship_data = self.response_formatter.format_hardship_data(hardship_data, hardship_analysis)
             formatted_budget_data = self.response_formatter.format_budget_data(budget_data, budget_analysis)
             formatted_address_data = self.response_formatter.format_address_data(address_data, address_analysis)
+            formatted_duplication_data = self.response_formatter.format_duplication_data(duplication_data, duplication_analysis)
             formatted_draft_data = self.response_formatter.format_draft_data(draft_data, draft_analysis)
+            formatted_credit_score_data = self.response_formatter.format_credit_score_data(credit_score_data, credit_score_analysis)
             
             # Build contract data with validation outcome using the new embedded pattern
             formatted_contract_data = None
@@ -183,20 +187,7 @@ class CombinedValidationService:
                     "contract_validation_result": contract_analysis.result.value if contract_analysis else None
                 }
             
-            # Build duplication data with validation outcome
-            formatted_duplication_data = None
-            if duplication_data and duplication_analysis:
-                formatted_duplication_data = {
-                    "ssn": duplication_data.get('ssn'),
-                    "phone": duplication_data.get('phone'),
-                    "has_duplicates": duplication_analysis.has_duplicates,
-                    "ssn_duplicate_count": duplication_analysis.ssn_duplicate_count,
-                    "phone_duplicate_count": duplication_analysis.phone_duplicate_count,
-                    "ssn_duplicates": duplication_analysis.ssn_duplicates,
-                    "phone_duplicates": duplication_analysis.phone_duplicates,
-                    "duplication_validation_result": duplication_analysis.result if duplication_analysis else None,
-                    "duplication_reason": duplication_analysis.reason
-                }
+
             
             # Determine combined result and reason using the analyzer
             combined_result, combined_result_reason = self.analyzer.analyze_combined_result(
@@ -205,14 +196,15 @@ class CombinedValidationService:
                 address_analysis=formatted_address_data,
                 contract_analysis=formatted_contract_data,
                 duplication_analysis=formatted_duplication_data,
-                draft_analysis=formatted_draft_data
+                draft_analysis=formatted_draft_data,
+                credit_score_analysis=formatted_credit_score_data
             )
             logger.info(f"Combined validation result for contact {masked_id}: {combined_result} - {combined_result_reason}")
             
             # Format combined response
-            formatted_response = self._format_combined_response(
+            formatted_response = await self._format_combined_response(
                 contact_id, hardship_data, budget_data, address_data, contract_data,
-                hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result, duplication_analysis, draft_analysis
+                hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result, duplication_analysis, draft_analysis, credit_score_analysis
             )
             
             return {
@@ -229,6 +221,7 @@ class CombinedValidationService:
                 "contract_data": formatted_contract_data,
                 "duplication_data": formatted_duplication_data,
                 "draft_data": formatted_draft_data,
+                "credit_score_data": formatted_credit_score_data,
                 "error": None
             }
             
@@ -240,7 +233,7 @@ class CombinedValidationService:
                 "success": False,
                 "combined_result": "error",
                 "combined_result_reason": "Error occurred during validation analysis",
-                "message": format_error_response(contact_id, f"Error analyzing validation data for contact {contact_id}. Please try again.", "validation"),
+                "message": await format_error_response(contact_id, f"Error analyzing validation data for contact {contact_id}. Please try again.", "validation"),
                 "eligibility_data": None,
                 "hardship_data": None,
                 "budget_data": None,
@@ -248,12 +241,13 @@ class CombinedValidationService:
                 "contract_data": None,
                 "duplication_data": None,
                 "draft_data": None,
+                "credit_score_data": None,
                 "error": str(e)
             }
     
 
     
-    def _format_combined_response(
+    async def _format_combined_response(
         self, 
         contact_id: int, 
         hardship_data: Optional[Dict[str, Any]], 
@@ -266,13 +260,14 @@ class CombinedValidationService:
         contract_analysis, 
         combined_result: str,
         duplication_analysis=None,
-        draft_analysis=None
+        draft_analysis=None,
+        credit_score_analysis=None
     ) -> str:
         """
         Format combined hardship, budget, address, contract, duplication, and draft analysis into a comprehensive response.
         """
-        return format_combined_validation_response(
-            contact_id, hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result, contract_data, duplication_analysis, draft_analysis
+        return await format_combined_validation_response(
+            contact_id, hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result, contract_data, duplication_analysis, draft_analysis, credit_score_analysis
         )
     
     async def validate_contact_with_prefetched_data(
@@ -316,10 +311,11 @@ class CombinedValidationService:
             "contract_data": None,
             "duplication_data": None,
             "draft_data": None,
+            "credit_score_data": None,
             "error": reason
         }
     
-    def _create_no_data_response(
+    async def _create_no_data_response(
         self, 
         contact_id: int, 
         eligibility_data: Optional[Dict[str, Any]]
@@ -330,7 +326,7 @@ class CombinedValidationService:
             "eligibility": "eligible",
             "success": False,
             "combined_result": "no_data",
-            "message": format_no_data_response(contact_id, "validation"),
+            "message": await format_no_data_response(contact_id, "validation"),
             "eligibility_data": eligibility_data,
             "hardship_data": None,
             "budget_data": None,
@@ -338,5 +334,6 @@ class CombinedValidationService:
             "contract_data": None,
             "duplication_data": None,
             "draft_data": None,
+            "credit_score_data": None,
             "error": "No contact data available"
         } 

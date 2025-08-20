@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, bindparam
 from underwriting_validation.db.models import Contact, ContactCategory, ContactLeadStatus
 from underwriting_validation.utils.pii_filter import mask_contact_id
+from underwriting_validation.utils.phone_cleaner import clean_phone_number
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +71,16 @@ class EligibilityRepository:
         if row.contact_lead_status != 'Submitted':
             reasons.append(f"Contact is not in submitted status (current: {row.contact_lead_status})")
         
+        # Clean the phone number
+        cleaned_phone = clean_phone_number(row.phone3)
+        
         if reasons:
             logger.debug(f"Contact {masked_id} eligibility check failed: {', '.join(reasons)}")
             return {
                 "contact_id": row.id,
                 "acctid": row.acctid,
                 "email": row.email,
-                "phone3": row.phone3,
+                "phone3": cleaned_phone,
                 "del_flag": row.del_,
                 "iscoapp": row.iscoapp,
                 "contact_category": row.contact_category,
@@ -90,7 +94,7 @@ class EligibilityRepository:
             "contact_id": row.id,
             "acctid": row.acctid,
             "email": row.email,
-            "phone3": row.phone3,
+            "phone3": cleaned_phone,
             "del_flag": row.del_,
             "iscoapp": row.iscoapp,
             "contact_category": row.contact_category,

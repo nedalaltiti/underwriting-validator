@@ -88,7 +88,7 @@ class ContractDebtsValidationService:
             logger.error(f"Error analyzing debts validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_debts_response(self, analysis: DebtsValidationAnalysis) -> str:
+    async def format_debts_response(self, analysis: DebtsValidationAnalysis) -> str:
         """Format the debts analysis into a user-friendly response."""
         if analysis.debt_count_check == DebtsValidationResult.MATCH:
             return f"✅ Debts validation passed: Contract and Forth debt counts match"

@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 class ContractValidationService:
     """Main service for contract validation operations."""
     
-    def __init__(self):
+    def __init__(self, orchestrator: Optional[ContractValidationOrchestrator] = None):
         """Initialize the contract validation service."""
-        self.orchestrator = ContractValidationOrchestrator()
+        self.orchestrator = orchestrator or ContractValidationOrchestrator()
         logger.info("ContractValidationService initialized")
     
     async def analyze_contract_validity(
@@ -60,7 +60,7 @@ class ContractValidationService:
             logger.error(f"Error in contract validation: {e}")
             return Error(f"Contract validation failed: {str(e)}")
     
-    def format_contract_response(self, analysis: ContractAnalysis, contract_data: ContractDataIn) -> str:
+    async def format_contract_response(self, analysis: ContractAnalysis, contract_data: ContractDataIn) -> str:
         """Format the contract analysis into a user-friendly response."""
         from underwriting_validation.utils.contract_responses import format_contract_response
-        return format_contract_response(analysis, contract_data)
+        return await format_contract_response(analysis, contract_data)

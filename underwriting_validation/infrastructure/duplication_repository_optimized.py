@@ -1,15 +1,16 @@
 """
-Duplication Repository for database operations.
+Optimized Duplication Repository for database operations.
 
 This repository handles duplication validation by checking if a contact's SSN or phone number
-already exists in the system under certain status conditions.
+already exists in the system under certain status conditions. Optimized for performance with
+parallel queries and timeouts.
 """
 
+import asyncio
 import logging
 from typing import Optional, Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, null, bindparam, not_
-import asyncio
 
 from underwriting_validation.db.models import Contact, ContactCategory, ContactLeadStatus
 from underwriting_validation.config.settings import settings
@@ -17,13 +18,30 @@ from underwriting_validation.utils.phone_cleaner import clean_phone_number
 
 logger = logging.getLogger(__name__)
 
-class DuplicationRepository:
-    """Repository for duplication validation operations."""
+class OptimizedDuplicationRepository:
+    """Optimized repository for duplication validation operations."""
     
     def __init__(self, session: AsyncSession):
         self.session = session
         # Get duplication-specific field values from settings
         self.exclude_contact_id = settings.duplication_fields.exclude_contact_id
+        # Query timeout in seconds
+        self.query_timeout = 10.0
+    
+    async def _execute_with_timeout(self, stmt, timeout: float = None) -> Any:
+        """Execute a database statement with timeout."""
+        if timeout is None:
+            timeout = self.query_timeout
+        
+        try:
+            result = await asyncio.wait_for(
+                self.session.execute(stmt),
+                timeout=timeout
+            )
+            return result
+        except asyncio.TimeoutError:
+            logger.error(f"Database query timed out after {timeout} seconds")
+            raise TimeoutError(f"Database query timed out after {timeout} seconds")
     
     async def check_ssn_duplication(self, ssn: str, exclude_contact_id: int = None) -> List[Dict[str, Any]]:
         """
@@ -69,9 +87,10 @@ class DuplicationRepository:
                         not_(ContactLeadStatus.title.in_(excluded_statuses))
                     )
                 )
+                .limit(100)  # Limit results for performance
             )
             
-            result = await self.session.execute(stmt)
+            result = await self._execute_with_timeout(stmt)
             duplicates = []
             
             for row in result.fetchall():
@@ -140,9 +159,10 @@ class DuplicationRepository:
                         not_(ContactLeadStatus.title.in_(excluded_statuses))
                     )
                 )
+                .limit(100)  # Limit results for performance
             )
             
-            result = await self.session.execute(stmt)
+            result = await self._execute_with_timeout(stmt)
             duplicates = []
             
             for row in result.fetchall():
@@ -163,7 +183,7 @@ class DuplicationRepository:
     
     async def check_contact_duplication(self, contact_id: int, exclude_contact_id: int = None) -> Dict[str, Any]:
         """
-        Check for duplication of a contact's SSN and phone number.
+        Check for duplication of a contact's SSN and phone number using parallel queries.
         
         Args:
             contact_id: The contact ID to check for duplication
@@ -178,7 +198,7 @@ class DuplicationRepository:
             
             # First get the contact's SSN and phone
             stmt = select(Contact.ssn, Contact.phone3).where(Contact.id == contact_id)
-            result = await self.session.execute(stmt)
+            result = await self._execute_with_timeout(stmt)
             contact_data = result.fetchone()
             
             if not contact_data:
@@ -198,26 +218,52 @@ class DuplicationRepository:
             if phone:
                 phone = clean_phone_number(phone)
             
-            # Check SSN and phone duplication in parallel
-            ssn_task = self.check_ssn_duplication(ssn, exclude_contact_id) if ssn else asyncio.create_task(asyncio.sleep(0))
-            phone_task = self.check_phone_duplication(phone, exclude_contact_id) if phone else asyncio.create_task(asyncio.sleep(0))
+            # Run SSN and phone duplication checks in parallel
+            duplication_tasks = []
             
-            ssn_duplicates, phone_duplicates = await asyncio.gather(ssn_task, phone_task, return_exceptions=True)
+            # Add SSN duplication check if SSN exists
+            if ssn:
+                duplication_tasks.append(self.check_ssn_duplication(ssn, exclude_contact_id))
+            else:
+                duplication_tasks.append(asyncio.create_task(asyncio.sleep(0)))  # Placeholder
             
-            # Handle exceptions
-            if isinstance(ssn_duplicates, Exception):
-                logger.error(f"SSN duplication check failed for contact {contact_id}: {ssn_duplicates}")
-                ssn_duplicates = []
-            if isinstance(phone_duplicates, Exception):
-                logger.error(f"Phone duplication check failed for contact {contact_id}: {phone_duplicates}")
-                phone_duplicates = []
+            # Add phone duplication check if phone exists
+            if phone:
+                duplication_tasks.append(self.check_phone_duplication(phone, exclude_contact_id))
+            else:
+                duplication_tasks.append(asyncio.create_task(asyncio.sleep(0)))  # Placeholder
+            
+            # Execute both checks in parallel with timeout
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*duplication_tasks, return_exceptions=True),
+                    timeout=self.query_timeout * 2  # Double timeout for parallel queries
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"Parallel duplication checks timed out for contact {contact_id}")
+                return {
+                    "contact_id": contact_id,
+                    "ssn_duplicates": [],
+                    "phone_duplicates": [],
+                    "has_duplicates": False,
+                    "error": "Duplication checks timed out"
+                }
+            
+            # Extract results
+            ssn_duplicates = results[0] if not isinstance(results[0], Exception) and ssn else []
+            phone_duplicates = results[1] if not isinstance(results[1], Exception) and phone else []
+            
+            # Log any errors
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Duplication check {i} failed for contact {contact_id}: {result}")
             
             has_duplicates = len(ssn_duplicates) > 0 or len(phone_duplicates) > 0
             
             return {
                 "contact_id": contact_id,
                 "ssn": ssn,
-                "phone": phone,
+                "phone": phone,  # This is now cleaned
                 "ssn_duplicates": ssn_duplicates,
                 "phone_duplicates": phone_duplicates,
                 "has_duplicates": has_duplicates,
@@ -228,3 +274,6 @@ class DuplicationRepository:
         except Exception as e:
             logger.error(f"Error checking contact duplication for contact {contact_id}: {e}")
             raise
+
+# Alias for backward compatibility
+DuplicationRepository = OptimizedDuplicationRepository

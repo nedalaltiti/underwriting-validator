@@ -100,7 +100,7 @@ class ContractSignatureValidationService:
             logger.error(f"Error analyzing signature validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_signature_response(self, analysis: SignatureValidationAnalysis) -> str:
+    async def format_signature_response(self, analysis: SignatureValidationAnalysis) -> str:
         """Format the signature analysis into a user-friendly response."""
         if analysis.signature_check == SignatureValidationResult.VALID:
             return f"✅ Signature validation passed: Signatures are valid"

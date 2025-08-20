@@ -7,7 +7,7 @@ This module contains formatting functions for combined validation responses.
 from typing import Dict, Any, Optional
 
 
-def format_combined_validation_response(
+async def format_combined_validation_response(
     contact_id: int,
     hardship_analysis: Any,
     budget_analysis: Any,
@@ -16,7 +16,8 @@ def format_combined_validation_response(
     combined_result: str,
     contract_data: Optional[Any] = None,
     duplication_analysis: Optional[Any] = None,
-    draft_analysis: Optional[Any] = None
+    draft_analysis: Optional[Any] = None,
+    credit_score_analysis: Optional[Any] = None
 ) -> str:
     """Format combined hardship, budget, address, and contract analysis into a comprehensive response."""
     response_parts = []
@@ -357,5 +358,32 @@ def format_combined_validation_response(
                     response_parts.append(f"  ... and {len(monthly_payments) - 6} more month(s)\n")
     else:
         response_parts.append("**Status:** No draft data available\n")
+    
+    # Credit Score Analysis Section
+    response_parts.append("### **Credit Score Validation**\n")
+    if credit_score_analysis:
+        # Handle both CreditScoreAnalysis object and dictionary
+        if hasattr(credit_score_analysis, 'result'):
+            # It's a CreditScoreAnalysis object
+            credit_score_status = "**PASS**" if credit_score_analysis.result.value == "pass" else "**NO PASS**" if credit_score_analysis.result.value == "no_pass" else "**NO DATA**"
+            response_parts.append(f"**Status:** {credit_score_status}\n")
+            response_parts.append(f"**Equifax:** {credit_score_analysis.equifax}\n")
+            response_parts.append(f"**Experian:** {credit_score_analysis.experian}\n")
+            response_parts.append(f"**TransUnion:** {credit_score_analysis.transunion}\n")
+            response_parts.append(f"**Total Score:** {credit_score_analysis.credit_score}\n")
+            response_parts.append(f"**Credit Score Status:** {credit_score_analysis.credit_score_status.upper()}\n")
+            response_parts.append(f"**Reason:** {credit_score_analysis.reason}\n")
+        else:
+            # It's a dictionary (formatted data)
+            credit_score_status = "**PASS**" if credit_score_analysis.get('credit_score_validation_result') == "pass" else "**NO PASS**" if credit_score_analysis.get('credit_score_validation_result') == "no_pass" else "**NO DATA**"
+            response_parts.append(f"**Status:** {credit_score_status}\n")
+            response_parts.append(f"**Equifax:** {credit_score_analysis.get('equifax', 0)}\n")
+            response_parts.append(f"**Experian:** {credit_score_analysis.get('experian', 0)}\n")
+            response_parts.append(f"**TransUnion:** {credit_score_analysis.get('transunion', 0)}\n")
+            response_parts.append(f"**Total Score:** {credit_score_analysis.get('credit_score', 0)}\n")
+            response_parts.append(f"**Credit Score Status:** {credit_score_analysis.get('credit_score_status', 'unknown').upper()}\n")
+            response_parts.append(f"**Reason:** {credit_score_analysis.get('credit_score_reason', 'No reason provided')}\n")
+    else:
+        response_parts.append("**Status:** No credit score data available\n")
     
     return "\n".join(response_parts)

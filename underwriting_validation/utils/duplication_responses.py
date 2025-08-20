@@ -7,7 +7,7 @@ This module contains formatting functions specifically for duplication validatio
 from typing import Dict, Any
 
 
-def format_duplication_response(analysis: Any, duplication_data: Dict[str, Any]) -> str:
+async def format_duplication_response(analysis: Any, duplication_data: Dict[str, Any]) -> str:
     """Format duplication analysis into a user-friendly response."""
     contact_id = duplication_data.get('contact_id', 'Unknown')
     ssn = duplication_data.get('ssn', '')
@@ -54,7 +54,7 @@ def format_duplication_response(analysis: Any, duplication_data: Dict[str, Any])
     return "\n".join(response_parts)
 
 
-def format_duplication_analysis_response(duplication: Dict[str, Any]) -> str:
+async def format_duplication_analysis_response(duplication: Dict[str, Any]) -> str:
     """Format duplication analysis results into a user-friendly response."""
     if not duplication:
         return "No duplication data found for that contact ID."
@@ -144,6 +144,6 @@ def format_duplication_analysis_response(duplication: Dict[str, Any]) -> str:
     return "Unable to format duplication analysis results. Please try again."
 
 
-def format_no_data_response(contact_id: int, validation_type: str = "duplication") -> str:
+async def format_no_data_response(contact_id: int, validation_type: str = "duplication") -> str:
     """Format a response when no duplication data is available."""
     return f"Contact {contact_id} does not have {validation_type} validation data.\nNo {validation_type} information has been recorded for this contact."

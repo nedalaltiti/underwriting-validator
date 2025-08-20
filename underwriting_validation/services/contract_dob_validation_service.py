@@ -112,7 +112,7 @@ class ContractDOBValidationService:
             logger.error(f"Error analyzing DOB validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_dob_response(self, analysis: DOBValidationAnalysis) -> str:
+    async def format_dob_response(self, analysis: DOBValidationAnalysis) -> str:
         """Format the DOB analysis into a user-friendly response."""
         responses = []
         

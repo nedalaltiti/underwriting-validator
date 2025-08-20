@@ -189,7 +189,7 @@ class ContractVLPValidationService:
             logger.error(f"Error analyzing VLP validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_vlp_response(self, analysis: VLPValidationAnalysis) -> str:
+    async def format_vlp_response(self, analysis: VLPValidationAnalysis) -> str:
         """Format the VLP analysis into a user-friendly response."""
         responses = []
         

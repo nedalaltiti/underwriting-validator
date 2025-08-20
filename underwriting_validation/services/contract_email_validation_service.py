@@ -94,7 +94,7 @@ class ContractEmailValidationService:
             logger.error(f"Error analyzing email validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_email_response(self, analysis: EmailValidationAnalysis) -> str:
+    async def format_email_response(self, analysis: EmailValidationAnalysis) -> str:
         """Format the email analysis into a user-friendly response."""
         if analysis.email_check == EmailValidationResult.MATCH:
             return f"✅ Email validation passed: Forth and contract emails match"

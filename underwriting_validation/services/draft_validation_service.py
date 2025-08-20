@@ -123,7 +123,7 @@ class DraftValidationService:
             logger.error(f"Error analyzing draft validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_draft_response(self, analysis: DraftAnalysis, draft_data: DraftDataIn) -> str:
+    async def format_draft_response(self, analysis: DraftAnalysis, draft_data: DraftDataIn) -> str:
         """Format the draft analysis into a user-friendly response."""
         from underwriting_validation.utils.validation_responses import format_draft_response
-        return format_draft_response(analysis, draft_data)
+        return await format_draft_response(analysis, draft_data)

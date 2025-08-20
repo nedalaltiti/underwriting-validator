@@ -38,12 +38,13 @@ class DuplicationValidationService:
         self.repository = repository
         logger.info("DuplicationValidationService initialized")
     
-    async def analyze_duplication_validity(self, data: DuplicationDataIn) -> Result[DuplicationAnalysis]:
+    async def analyze_duplication_validity(self, data: DuplicationDataIn, duplication_data: Optional[Dict[str, Any]] = None) -> Result[DuplicationAnalysis]:
         """
         Analyze duplication validity for a contact.
         
         Args:
             data: DuplicationDataIn containing contact information
+            duplication_data: Optional pre-fetched duplication data to avoid duplicate database calls
             
         Returns:
             Result containing DuplicationAnalysis or error message
@@ -52,8 +53,9 @@ class DuplicationValidationService:
             masked_id = mask_contact_id(data.contact_id)
             logger.info(f"Analyzing duplication validity for contact {masked_id}")
             
-            # Check for duplication using the repository
-            duplication_data = await self.repository.check_contact_duplication(data.contact_id)
+            # Use pre-fetched data if available, otherwise fetch from repository
+            if duplication_data is None:
+                duplication_data = await self.repository.check_contact_duplication(data.contact_id)
             
             if duplication_data.get("error"):
                 logger.warning(f"Error in duplication check for contact {masked_id}: {duplication_data['error']}")
@@ -67,7 +69,7 @@ class DuplicationValidationService:
             
             # Determine the result and reason
             if has_duplicates:
-                result = "duplicate_found"
+                result = "no_pass"  # Standardized to match other validations
                 if ssn_duplicate_count > 0 and phone_duplicate_count > 0:
                     reason = f"Contact has {ssn_duplicate_count} SSN duplicate(s) and {phone_duplicate_count} phone duplicate(s) in the system"
                 elif ssn_duplicate_count > 0:
@@ -75,7 +77,7 @@ class DuplicationValidationService:
                 else:
                     reason = f"Contact has {phone_duplicate_count} phone duplicate(s) in the system"
             else:
-                result = "no_duplicates"
+                result = "pass"  # Standardized to match other validations
                 reason = "No duplicates found for this contact's SSN or phone number"
             
             analysis = DuplicationAnalysis(
@@ -97,25 +99,26 @@ class DuplicationValidationService:
             logger.error(f"Error analyzing duplication validity for contact {masked_id}: {e}")
             return Error(f"Duplication analysis failed: {str(e)}")
     
-    async def analyze_duplication_validity_from_dict(self, data: Dict[str, Any]) -> Result[DuplicationAnalysis]:
+    async def analyze_duplication_validity_from_dict(self, data: Dict[str, Any], duplication_data: Optional[Dict[str, Any]] = None) -> Result[DuplicationAnalysis]:
         """
         Analyze duplication validity from a dictionary.
         
         Args:
             data: Dictionary containing duplication data
+            duplication_data: Optional pre-fetched duplication data to avoid duplicate database calls
             
         Returns:
             Result containing DuplicationAnalysis or error message
         """
         try:
             # Convert dictionary to Pydantic model
-            duplication_data = DuplicationDataIn(
+            duplication_data_model = DuplicationDataIn(
                 contact_id=data.get("contact_id"),
                 ssn=data.get("ssn"),
                 phone=data.get("phone")
             )
             
-            return await self.analyze_duplication_validity(duplication_data)
+            return await self.analyze_duplication_validity(duplication_data_model, duplication_data)
             
         except Exception as e:
             logger.error(f"Error converting duplication data to model: {e}")

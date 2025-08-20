@@ -95,7 +95,7 @@ class BudgetValidationService:
             logger.error(f"Error analyzing budget validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_budget_response(self, analysis: BudgetAnalysis, budget_data: BudgetDataIn) -> str:
+    async def format_budget_response(self, analysis: BudgetAnalysis, budget_data: BudgetDataIn) -> str:
         """Format the budget analysis into a user-friendly response."""
         from underwriting_validation.utils.validation_responses import format_budget_response
-        return format_budget_response(analysis, budget_data) 
+        return await format_budget_response(analysis, budget_data) 

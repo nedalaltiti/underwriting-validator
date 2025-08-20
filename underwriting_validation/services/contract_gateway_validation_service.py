@@ -137,7 +137,7 @@ class ContractGatewayValidationService:
             logger.error(f"Error analyzing gateway validity: {e}")
             return Error(f"Analysis failed: {str(e)}")
     
-    def format_gateway_response(self, analysis: GatewayValidationAnalysis) -> str:
+    async def format_gateway_response(self, analysis: GatewayValidationAnalysis) -> str:
         """Format the gateway analysis into a user-friendly response."""
         responses = []
         

@@ -61,7 +61,7 @@ async def analyze_contact_hardship(
                     "confidence": 0.0,
                     "reason": "No hardship data available for analysis"
                 },
-                "formatted_response": format_no_data_response(contact_id, "hardship")
+                "formatted_response": await format_no_data_response(contact_id, "hardship")
             }
         
         # Analyze hardship validity
@@ -75,11 +75,11 @@ async def analyze_contact_hardship(
                 "contact_id": contact_id,
                 "error": str(analysis_result.error),
                 "analysis": None,
-                "formatted_response": format_error_response(contact_id, f"Unable to analyze hardship data for contact {contact_id}. Please try again or contact support.", "hardship")
+                "formatted_response": await format_error_response(contact_id, f"Unable to analyze hardship data for contact {contact_id}. Please try again or contact support.", "hardship")
             }
         
         analysis = analysis_result.value
-        formatted_response = hardship_service.format_hardship_response(analysis, hardship_data)
+        formatted_response = await hardship_service.format_hardship_response(analysis, hardship_data)
         
         return {
             "contact_id": contact_id,
@@ -103,7 +103,7 @@ async def analyze_contact_hardship(
             "contact_id": contact_id,
             "error": str(e),
             "analysis": None,
-            "formatted_response": format_error_response(contact_id, f"Error analyzing hardship data for contact {contact_id}. Please try again.", "hardship")
+            "formatted_response": await format_error_response(contact_id, f"Error analyzing hardship data for contact {contact_id}. Please try again.", "hardship")
         }
 
 
@@ -146,7 +146,7 @@ async def analyze_contact_budget(
                     "result": "no_pass",
                     "reason": "No budget data available for analysis"
                 },
-                "formatted_response": format_no_data_response(contact_id, "budget")
+                "formatted_response": await format_no_data_response(contact_id, "budget")
             }
         
         # Convert dictionary to Pydantic model for type safety
@@ -167,11 +167,11 @@ async def analyze_contact_budget(
                 "contact_id": contact_id,
                 "error": str(analysis_result.error),
                 "analysis": None,
-                "formatted_response": format_error_response(contact_id, f"Unable to analyze budget data for contact {contact_id}. Please try again or contact support.", "budget")
+                "formatted_response": await format_error_response(contact_id, f"Unable to analyze budget data for contact {contact_id}. Please try again or contact support.", "budget")
             }
         
         analysis = analysis_result.value
-        formatted_response = budget_service.format_budget_response(analysis, budget_data_model)
+        formatted_response = await budget_service.format_budget_response(analysis, budget_data_model)
         
         return {
             "contact_id": contact_id,
@@ -198,7 +198,7 @@ async def analyze_contact_budget(
             "contact_id": contact_id,
             "error": str(e),
             "analysis": None,
-            "formatted_response": format_error_response(contact_id, f"Error analyzing budget data for contact {contact_id}. {e}")
+            "formatted_response": await format_error_response(contact_id, f"Error analyzing budget data for contact {contact_id}. {e}")
         }
 
 
@@ -241,7 +241,7 @@ async def analyze_contact_address(
                     "result": "no_data",
                     "reason": "No address data available for analysis"
                 },
-                "formatted_response": format_no_data_response(contact_id, "address")
+                "formatted_response": await format_no_data_response(contact_id, "address")
             }
         
         # Convert dictionary to Pydantic model for type safety
@@ -262,11 +262,11 @@ async def analyze_contact_address(
                 "contact_id": contact_id,
                 "error": str(analysis_result.error),
                 "analysis": None,
-                "formatted_response": format_error_response(contact_id, f"Unable to analyze address data for contact {contact_id}. Please try again or contact support.", "address")
+                "formatted_response": await format_error_response(contact_id, f"Unable to analyze address data for contact {contact_id}. Please try again or contact support.", "address")
             }
         
         analysis = analysis_result.value
-        formatted_response = address_service.format_address_response(analysis, address_data_model)
+        formatted_response = await address_service.format_address_response(analysis, address_data_model)
         
         return {
             "contact_id": contact_id,
@@ -290,5 +290,5 @@ async def analyze_contact_address(
             "contact_id": contact_id,
             "error": str(e),
             "analysis": None,
-            "formatted_response": format_error_response(contact_id, f"Error analyzing address data for contact {contact_id}. {e}")
+            "formatted_response": await format_error_response(contact_id, f"Error analyzing address data for contact {contact_id}. {e}")
         }

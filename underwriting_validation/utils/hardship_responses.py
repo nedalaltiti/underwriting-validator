@@ -7,7 +7,7 @@ This module contains formatting functions specifically for hardship validation r
 from typing import Dict, Any
 
 
-def format_hardship_response(analysis: Any, hardship_data: Dict[str, Any]) -> str:
+async def format_hardship_response(analysis: Any, hardship_data: Dict[str, Any]) -> str:
     """Format hardship analysis into a user-friendly response."""
     contact_id = hardship_data.get('contact_id', 'Unknown')
     financial_hardship = hardship_data.get('financial_hardship', '')
@@ -46,7 +46,7 @@ def format_hardship_response(analysis: Any, hardship_data: Dict[str, Any]) -> st
     return "\n".join(response_parts)
 
 
-def format_contact_response(contact: Dict[str, Any]) -> str:
+async def format_contact_response(contact: Dict[str, Any]) -> str:
     """Format contact analysis results into a user-friendly response."""
     if not contact:
         return "No hardship data found for that contact ID."

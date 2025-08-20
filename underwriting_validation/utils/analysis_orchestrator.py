@@ -13,6 +13,7 @@ from underwriting_validation.services.address_validation_service import AddressV
 from underwriting_validation.services.contract_validation_service import ContractValidationService, ContractDataIn
 from underwriting_validation.services.duplication_validation_service import DuplicationValidationService, DuplicationDataIn
 from underwriting_validation.services.draft_validation_service import DraftValidationService, DraftDataIn, MonthlyPayment
+from underwriting_validation.services.credit_score_validation_service import CreditScoreValidationService, CreditScoreDataIn
 from underwriting_validation.utils.pii_filter import mask_contact_id
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,9 @@ class AnalysisOrchestrator:
         budget_service: BudgetValidationService,
         address_service: AddressValidationService,
         contract_service: ContractValidationService,
-        duplication_service: DuplicationValidationService,
-        draft_service: DraftValidationService
+        duplication_service: Optional[DuplicationValidationService],
+        draft_service: DraftValidationService,
+        credit_score_service: CreditScoreValidationService
     ):
         self.hardship_service = hardship_service
         self.budget_service = budget_service
@@ -35,6 +37,7 @@ class AnalysisOrchestrator:
         self.contract_service = contract_service
         self.duplication_service = duplication_service
         self.draft_service = draft_service
+        self.credit_score_service = credit_score_service
     
     async def run_parallel_analyses(
         self,
@@ -45,8 +48,9 @@ class AnalysisOrchestrator:
         contract_data: Optional[Dict[str, Any]],
         duplication_data: Optional[Dict[str, Any]],
         draft_data: Optional[Dict[str, Any]],
+        credit_score_data: Optional[Dict[str, Any]],
         data_availability: Dict[str, bool]
-    ) -> Tuple[Any, Any, Any, Any, Any, Any]:
+    ) -> Tuple[Any, Any, Any, Any, Any, Any, Any]:
         """
         Run all LLM analyses in parallel.
         
@@ -135,15 +139,29 @@ class AnalysisOrchestrator:
             analysis_tasks.append(self.contract_service.analyze_contract_validity(contract_data_model))
             analysis_task_names.append('contract')
         
-        # Prepare duplication analysis if data exists
-        if data_availability.get('duplication'):
+        # Prepare duplication analysis if data exists and service is available
+        if data_availability.get('duplication') and self.duplication_service:
             duplication_data_model = DuplicationDataIn(
                 contact_id=duplication_data['contact_id'],
                 ssn=duplication_data.get('ssn'),
                 phone=duplication_data.get('phone')
             )
-            analysis_tasks.append(self.duplication_service.analyze_duplication_validity(duplication_data_model))
+            # Pass the pre-fetched duplication data to avoid duplicate database calls
+            analysis_tasks.append(self.duplication_service.analyze_duplication_validity(duplication_data_model, duplication_data))
             analysis_task_names.append('duplication')
+        
+        # Prepare credit score analysis if data exists
+        if data_availability.get('credit_score'):
+            credit_score_data_model = CreditScoreDataIn(
+                contact_id=credit_score_data['contact_id'],
+                equifax=credit_score_data['equifax'],
+                experian=credit_score_data['experian'],
+                transunion=credit_score_data['transunion'],
+                credit_score=credit_score_data['credit_score'],
+                has_credit_data=credit_score_data['has_credit_data']
+            )
+            analysis_tasks.append(self.credit_score_service.analyze_credit_score_validity(credit_score_data_model))
+            analysis_task_names.append('credit_score')
         
         # Prepare draft analysis if data exists
         if data_availability.get('draft'):
@@ -177,6 +195,7 @@ class AnalysisOrchestrator:
         contract_analysis = None
         duplication_analysis = None
         draft_analysis = None
+        credit_score_analysis = None
         
         # Process each analysis result
         for i, (result, task_name) in enumerate(zip(analysis_results, analysis_task_names)):
@@ -209,10 +228,14 @@ class AnalysisOrchestrator:
                 duplication_analysis = result.value
                 logger.info(f"Duplication analysis for contact {masked_id}: result={duplication_analysis.result}, has_duplicates={duplication_analysis.has_duplicates}")
             
+            elif task_name == 'credit_score':
+                credit_score_analysis = result.value
+                logger.info(f"Credit score analysis for contact {masked_id}: result={credit_score_analysis.result.value}, status={credit_score_analysis.credit_score_status}")
+            
             elif task_name == 'draft':
                 draft_analysis = result.value
                 logger.info(f"Draft analysis for contact {masked_id}: result={draft_analysis.result.value}, months_over_250={draft_analysis.months_over_250}, months_under_250={draft_analysis.months_under_250}")
         
         logger.info(f"LLM analysis completed for contact {masked_id}")
         
-        return hardship_analysis, budget_analysis, address_analysis, contract_analysis, duplication_analysis, draft_analysis
+        return hardship_analysis, budget_analysis, address_analysis, contract_analysis, duplication_analysis, draft_analysis, credit_score_analysis
