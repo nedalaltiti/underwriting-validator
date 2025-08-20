@@ -168,6 +168,28 @@ class ResponseFormatter:
             "duplication_reason": duplication_analysis.reason
         }
     
+    def format_draft_data(
+        self, 
+        draft_data: Optional[Dict[str, Any]], 
+        draft_analysis: Optional[Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Format draft data with validation outcome."""
+        if not draft_data or not draft_analysis:
+            return None
+            
+        return {
+            "monthly_payments": draft_data.get('monthly_payments', []),
+            "total_payments": draft_data.get('total_payments', 0),
+            "payment_count": draft_data.get('payment_count', 0),
+            "months_with_data": draft_data.get('months_with_data', 0),
+            "months_over_250": draft_analysis.months_over_250,
+            "months_under_250": draft_analysis.months_under_250,
+            "average_monthly_payment": draft_analysis.average_monthly_payment,
+            "minimum_monthly_payment": draft_analysis.minimum_monthly_payment,
+            "draft_validation_result": draft_analysis.result.value,
+            "draft_reason": draft_analysis.reason
+        }
+    
     def format_combined_response(
         self, 
         contact_id: int, 

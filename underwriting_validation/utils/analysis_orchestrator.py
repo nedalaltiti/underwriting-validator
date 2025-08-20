@@ -12,6 +12,7 @@ from underwriting_validation.services.budget_validation_service import BudgetVal
 from underwriting_validation.services.address_validation_service import AddressValidationService, AddressDataIn
 from underwriting_validation.services.contract_validation_service import ContractValidationService, ContractDataIn
 from underwriting_validation.services.duplication_validation_service import DuplicationValidationService, DuplicationDataIn
+from underwriting_validation.services.draft_validation_service import DraftValidationService, DraftDataIn, MonthlyPayment
 from underwriting_validation.utils.pii_filter import mask_contact_id
 
 logger = logging.getLogger(__name__)
@@ -25,13 +26,15 @@ class AnalysisOrchestrator:
         budget_service: BudgetValidationService,
         address_service: AddressValidationService,
         contract_service: ContractValidationService,
-        duplication_service: DuplicationValidationService
+        duplication_service: DuplicationValidationService,
+        draft_service: DraftValidationService
     ):
         self.hardship_service = hardship_service
         self.budget_service = budget_service
         self.address_service = address_service
         self.contract_service = contract_service
         self.duplication_service = duplication_service
+        self.draft_service = draft_service
     
     async def run_parallel_analyses(
         self,
@@ -41,8 +44,9 @@ class AnalysisOrchestrator:
         address_data: Optional[Dict[str, Any]],
         contract_data: Optional[Dict[str, Any]],
         duplication_data: Optional[Dict[str, Any]],
+        draft_data: Optional[Dict[str, Any]],
         data_availability: Dict[str, bool]
-    ) -> Tuple[Any, Any, Any, Any, Any]:
+    ) -> Tuple[Any, Any, Any, Any, Any, Any]:
         """
         Run all LLM analyses in parallel.
         
@@ -141,6 +145,27 @@ class AnalysisOrchestrator:
             analysis_tasks.append(self.duplication_service.analyze_duplication_validity(duplication_data_model))
             analysis_task_names.append('duplication')
         
+        # Prepare draft analysis if data exists
+        if data_availability.get('draft'):
+            monthly_payments = [
+                MonthlyPayment(
+                    year=payment['year'],
+                    month=payment['month'],
+                    total_payment=payment['total_payment'],
+                    over_250=payment['over_250']
+                )
+                for payment in draft_data.get('monthly_payments', [])
+            ]
+            draft_data_model = DraftDataIn(
+                contact_id=draft_data['contact_id'],
+                monthly_payments=monthly_payments,
+                total_payments=draft_data.get('total_payments', 0),
+                payment_count=draft_data.get('payment_count', 0),
+                months_with_data=draft_data.get('months_with_data', 0)
+            )
+            analysis_tasks.append(self.draft_service.analyze_draft_validity(draft_data_model))
+            analysis_task_names.append('draft')
+        
         # Execute all LLM analyses in parallel
         logger.info(f"Running {len(analysis_tasks)} LLM analyses for contact {masked_id} in parallel...")
         analysis_results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
@@ -151,6 +176,7 @@ class AnalysisOrchestrator:
         address_analysis = None
         contract_analysis = None
         duplication_analysis = None
+        draft_analysis = None
         
         # Process each analysis result
         for i, (result, task_name) in enumerate(zip(analysis_results, analysis_task_names)):
@@ -182,7 +208,11 @@ class AnalysisOrchestrator:
             elif task_name == 'duplication':
                 duplication_analysis = result.value
                 logger.info(f"Duplication analysis for contact {masked_id}: result={duplication_analysis.result}, has_duplicates={duplication_analysis.has_duplicates}")
+            
+            elif task_name == 'draft':
+                draft_analysis = result.value
+                logger.info(f"Draft analysis for contact {masked_id}: result={draft_analysis.result.value}, months_over_250={draft_analysis.months_over_250}, months_under_250={draft_analysis.months_under_250}")
         
         logger.info(f"LLM analysis completed for contact {masked_id}")
         
-        return hardship_analysis, budget_analysis, address_analysis, contract_analysis, duplication_analysis
+        return hardship_analysis, budget_analysis, address_analysis, contract_analysis, duplication_analysis, draft_analysis

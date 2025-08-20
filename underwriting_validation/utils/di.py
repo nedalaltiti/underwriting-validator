@@ -10,6 +10,7 @@ from underwriting_validation.services.budget_validation_service import BudgetVal
 from underwriting_validation.services.address_validation_service import AddressValidationService
 from underwriting_validation.services.contract_validation_service import ContractValidationService
 from underwriting_validation.services.duplication_validation_service import DuplicationValidationService
+from underwriting_validation.services.draft_validation_service import DraftValidationService
 from underwriting_validation.services.combined_validation_service import CombinedValidationService
 from underwriting_validation.db.session import get_db_session
 
@@ -62,6 +63,12 @@ def get_duplication_service() -> DuplicationValidationService:
 
 
 @lru_cache
+def get_draft_service() -> DraftValidationService:
+    """Return a shared DraftValidationService instance."""
+    return DraftValidationService()
+
+
+@lru_cache
 def get_combined_validation_service() -> CombinedValidationService:
     """Return a shared CombinedValidationService instance."""
     hardship_service = get_hardship_service()
@@ -69,11 +76,12 @@ def get_combined_validation_service() -> CombinedValidationService:
     address_service = get_address_service()
     contract_service = get_contract_service()
     duplication_service = get_duplication_service()
+    draft_service = get_draft_service()
     # Note: This will need to be updated to use dependency injection with session
     from underwriting_validation.infrastructure.contact_repository import ContactRepository
     # For now, we'll create a temporary repository - this should be updated
     # to use proper dependency injection with session
-    return CombinedValidationService(hardship_service, budget_service, address_service, contract_service, duplication_service, None)
+    return CombinedValidationService(hardship_service, budget_service, address_service, contract_service, duplication_service, draft_service, None)
 
 
 def get_contact_service_with_session(session) -> ContactService:
@@ -126,13 +134,14 @@ async def get_combined_validation_uc(
     budget_service = get_budget_service()
     address_service = get_address_service()
     contract_service = get_contract_service()
+    draft_service = get_draft_service()
     from underwriting_validation.infrastructure.contact_repository import ContactRepository
     from underwriting_validation.infrastructure.duplication_repository import DuplicationRepository
     
     repo = ContactRepository(session)
     duplication_repo = DuplicationRepository(session)
     duplication_service = DuplicationValidationService(duplication_repo)
-    return CombinedValidationService(hardship_service, budget_service, address_service, contract_service, duplication_service, repo)
+    return CombinedValidationService(hardship_service, budget_service, address_service, contract_service, duplication_service, draft_service, repo)
 
 
 

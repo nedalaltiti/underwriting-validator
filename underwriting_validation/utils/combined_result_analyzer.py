@@ -31,7 +31,8 @@ class CombinedResultAnalyzer:
         budget_analysis: Optional[Dict[str, Any]] = None,
         address_analysis: Optional[Dict[str, Any]] = None,
         contract_analysis: Optional[Dict[str, Any]] = None,
-        duplication_analysis: Optional[Dict[str, Any]] = None
+        duplication_analysis: Optional[Dict[str, Any]] = None,
+        draft_analysis: Optional[Dict[str, Any]] = None
     ) -> tuple[str, str]:
         """
         Analyze combined validation results and determine overall result with reasoning.
@@ -51,13 +52,14 @@ class CombinedResultAnalyzer:
         address_result = self._extract_validation_result('address', address_analysis)
         contract_result = self._extract_validation_result('contract', contract_analysis)
         duplication_result = self._extract_validation_result('duplication', duplication_analysis)
+        draft_result = self._extract_validation_result('draft', draft_analysis)
         
         # Get available validations
-        available_validations = [r for r in [hardship_result, budget_result, address_result, contract_result, duplication_result] if r is not None]
+        available_validations = [r for r in [hardship_result, budget_result, address_result, contract_result, duplication_result, draft_result] if r is not None]
         
         # If no data for any validation
         if not available_validations:
-            return "no_data", "No validation data available for any category (hardship, budget, address, contract, or duplication)"
+            return "no_data", "No validation data available for any category (hardship, budget, address, contract, duplication, or draft)"
         
         # Check if any validation returned "not_eligible"
         not_eligible_validations = [v for v in available_validations if v.result == "not_eligible"]
@@ -174,6 +176,23 @@ class CombinedResultAnalyzer:
                 type="duplication",
                 result=result,
                 reason=f"Duplicates found: {has_duplicates}, SSN duplicates: {ssn_duplicate_count}, Phone duplicates: {phone_duplicate_count}"
+            )
+        elif validation_type == "draft":
+            result = analysis_data.get('draft_validation_result', 'no_data')
+            months_over_250 = analysis_data.get('months_over_250', 0)
+            months_under_250 = analysis_data.get('months_under_250', 0)
+            months_with_data = analysis_data.get('months_with_data', 0)
+            average_monthly_payment = analysis_data.get('average_monthly_payment', 0)
+            if result == "no_data":
+                return ValidationResult(
+                    type="draft",
+                    result="no_data",
+                    reason="No draft data available"
+                )
+            return ValidationResult(
+                type="draft",
+                result=result,
+                reason=f"Payment validation: {months_over_250}/{months_with_data} months meet $250 minimum (Avg: ${average_monthly_payment:,.2f})"
             )
         
         return None

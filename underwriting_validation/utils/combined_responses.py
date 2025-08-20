@@ -15,7 +15,8 @@ def format_combined_validation_response(
     contract_analysis: Any,
     combined_result: str,
     contract_data: Optional[Any] = None,
-    duplication_analysis: Optional[Any] = None
+    duplication_analysis: Optional[Any] = None,
+    draft_analysis: Optional[Any] = None
 ) -> str:
     """Format combined hardship, budget, address, and contract analysis into a comprehensive response."""
     response_parts = []
@@ -306,5 +307,55 @@ def format_combined_validation_response(
                 response_parts.append(f"  ... and {len(phone_duplicates) - 3} more phone duplicate(s)\n")
     else:
         response_parts.append("**Status:** No duplication data available\n")
+    
+    # Draft Analysis Section
+    response_parts.append("### **Draft Validation**\n")
+    if draft_analysis:
+        # Handle both DraftAnalysis object and dictionary
+        if hasattr(draft_analysis, 'result'):
+            # It's a DraftAnalysis object
+            draft_status = "**PASS**" if draft_analysis.result.value == "pass" else "**NO PASS**"
+            response_parts.append(f"**Status:** {draft_status}\n")
+            response_parts.append(f"**Months with Data:** {draft_analysis.months_with_data}\n")
+            response_parts.append(f"**Months Over $250:** {draft_analysis.months_over_250}\n")
+            response_parts.append(f"**Months Under $250:** {draft_analysis.months_under_250}\n")
+            response_parts.append(f"**Average Monthly Payment:** ${draft_analysis.average_monthly_payment:,.2f}\n")
+            response_parts.append(f"**Minimum Monthly Payment:** ${draft_analysis.minimum_monthly_payment:,.2f}\n")
+            response_parts.append(f"**Total Payments:** ${draft_analysis.total_payments:,.2f}\n")
+            response_parts.append(f"**Payment Count:** {draft_analysis.payment_count}\n")
+            response_parts.append(f"**Reason:** {draft_analysis.reason}\n")
+            
+            # Show monthly payment details if available
+            if draft_analysis.monthly_payments:
+                response_parts.append("**Monthly Payment Details:**\n")
+                for i, payment in enumerate(draft_analysis.monthly_payments[:6], 1):  # Show first 6 months
+                    status = "✓" if payment.over_250 else "✗"
+                    response_parts.append(f"  {i}. {payment.year}-{payment.month:02d}: ${payment.total_payment:,.2f} {status}\n")
+                if len(draft_analysis.monthly_payments) > 6:
+                    response_parts.append(f"  ... and {len(draft_analysis.monthly_payments) - 6} more month(s)\n")
+        else:
+            # It's a dictionary (formatted data)
+            draft_status = "**PASS**" if draft_analysis.get('draft_validation_result') == "pass" else "**NO PASS**"
+            response_parts.append(f"**Status:** {draft_status}\n")
+            response_parts.append(f"**Months with Data:** {draft_analysis.get('months_with_data', 0)}\n")
+            response_parts.append(f"**Months Over $250:** {draft_analysis.get('months_over_250', 0)}\n")
+            response_parts.append(f"**Months Under $250:** {draft_analysis.get('months_under_250', 0)}\n")
+            response_parts.append(f"**Average Monthly Payment:** ${draft_analysis.get('average_monthly_payment', 0):,.2f}\n")
+            response_parts.append(f"**Minimum Monthly Payment:** ${draft_analysis.get('minimum_monthly_payment', 0):,.2f}\n")
+            response_parts.append(f"**Total Payments:** ${draft_analysis.get('total_payments', 0):,.2f}\n")
+            response_parts.append(f"**Payment Count:** {draft_analysis.get('payment_count', 0)}\n")
+            response_parts.append(f"**Reason:** {draft_analysis.get('draft_reason', 'No reason provided')}\n")
+            
+            # Show monthly payment details if available
+            monthly_payments = draft_analysis.get('monthly_payments', [])
+            if monthly_payments:
+                response_parts.append("**Monthly Payment Details:**\n")
+                for i, payment in enumerate(monthly_payments[:6], 1):  # Show first 6 months
+                    status = "✓" if payment.get('over_250', False) else "✗"
+                    response_parts.append(f"  {i}. {payment.get('year', 'Unknown')}-{payment.get('month', 0):02d}: ${payment.get('total_payment', 0):,.2f} {status}\n")
+                if len(monthly_payments) > 6:
+                    response_parts.append(f"  ... and {len(monthly_payments) - 6} more month(s)\n")
+    else:
+        response_parts.append("**Status:** No draft data available\n")
     
     return "\n".join(response_parts)

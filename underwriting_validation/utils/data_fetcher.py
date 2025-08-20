@@ -22,7 +22,7 @@ class DataFetcher:
         self, 
         contact_id: int, 
         hardship_data: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
         """
         Fetch all validation data in parallel for better performance.
         
@@ -49,7 +49,8 @@ class DataFetcher:
             self.repository.fetch_contact_with_budget_data(contact_id),
             self.repository.fetch_contact_with_address_data(contact_id),
             self.repository.fetch_contact_with_contract_data(contact_id),
-            self.repository.fetch_contact_with_duplication_data(contact_id)
+            self.repository.fetch_contact_with_duplication_data(contact_id),
+            self.repository.fetch_contact_with_draft_data(contact_id)
         ])
         
         # Execute all database queries in parallel
@@ -63,11 +64,13 @@ class DataFetcher:
             address_data = results[2] if not isinstance(results[2], Exception) else None
             contract_data = results[3] if not isinstance(results[3], Exception) else None
             duplication_data = results[4] if not isinstance(results[4], Exception) else None
+            draft_data = results[5] if not isinstance(results[5], Exception) else None
         else:
             budget_data = results[0] if not isinstance(results[0], Exception) else None
             address_data = results[1] if not isinstance(results[1], Exception) else None
             contract_data = results[2] if not isinstance(results[2], Exception) else None
             duplication_data = results[3] if not isinstance(results[3], Exception) else None
+            draft_data = results[4] if not isinstance(results[4], Exception) else None
         
         # Log any database query errors
         for i, result in enumerate(results):
@@ -76,7 +79,7 @@ class DataFetcher:
         
         logger.info(f"Data fetching completed for contact {masked_id}")
         
-        return hardship_data, budget_data, address_data, contract_data, duplication_data
+        return hardship_data, budget_data, address_data, contract_data, duplication_data, draft_data
     
     def check_data_availability(
         self, 
@@ -84,7 +87,8 @@ class DataFetcher:
         budget_data: Optional[Dict[str, Any]], 
         address_data: Optional[Dict[str, Any]], 
         contract_data: Optional[Dict[str, Any]], 
-        duplication_data: Optional[Dict[str, Any]]
+        duplication_data: Optional[Dict[str, Any]],
+        draft_data: Optional[Dict[str, Any]]
     ) -> Dict[str, bool]:
         """
         Check which validation data is available.
@@ -128,10 +132,13 @@ class DataFetcher:
         
         has_duplication_data = duplication_data and not duplication_data.get("error")
         
+        has_draft_data = draft_data and draft_data.get('months_with_data', 0) > 0
+        
         return {
             'hardship': has_hardship_data,
             'budget': has_budget_data,
             'address': has_address_data,
             'contract': has_contract_data,
-            'duplication': has_duplication_data
+            'duplication': has_duplication_data,
+            'draft': has_draft_data
         }

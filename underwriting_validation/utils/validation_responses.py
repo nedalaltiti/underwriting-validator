@@ -16,6 +16,7 @@ from .hardship_responses import format_hardship_response, format_contact_respons
 from .budget_responses import format_budget_response, format_budget_analysis_response
 from .address_responses import format_address_response, format_address_analysis_response
 from .contract_responses import format_contract_response, format_contract_analysis_response
+from .draft_responses import format_draft_response, format_draft_analysis_response
 from .combined_responses import format_combined_validation_response
 from .error_responses import (
     format_no_data_response, 
@@ -65,6 +66,10 @@ __all__ = [
     'format_contract_response',
     'format_contract_analysis_response',
     
+    # Draft responses
+    'format_draft_response',
+    'format_draft_analysis_response',
+    
     # Combined responses
     'format_combined_validation_response',
     
@@ -93,6 +98,10 @@ class ValidationResponseFormatter:
     @staticmethod
     def format_contract_response(analysis, contract_data):
         return format_contract_response(analysis, contract_data)
+    
+    @staticmethod
+    def format_draft_response(analysis, draft_data):
+        return format_draft_response(analysis, draft_data)
     
     @staticmethod
     def format_contact_response(contact):
