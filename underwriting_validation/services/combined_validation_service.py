@@ -1,38 +1,50 @@
 """
 Combined Validation Service for Underwriting
 
-This service handles combined hardship, budget, and address validation analysis.
-It provides a unified interface for analyzing hardship, budget, and address data
-for a given contact ID.
+This service orchestrates combined hardship, budget, address, contract, and duplication validation analysis.
+It provides a unified interface for analyzing all validation types for a given contact ID.
 """
 
 import logging
 from typing import Optional, Dict, Any
 from underwriting_validation.services.hardship_validation_service import HardshipValidationService
-from underwriting_validation.services.budget_validation_service import BudgetValidationService, BudgetDataIn
-from underwriting_validation.services.address_validation_service import AddressValidationService, AddressDataIn
-from underwriting_validation.services.contract_validation_service import ContractValidationService, ContractDataIn
-from underwriting_validation.services.duplication_validation_service import DuplicationValidationService, DuplicationDataIn
+from underwriting_validation.services.budget_validation_service import BudgetValidationService
+from underwriting_validation.services.address_validation_service import AddressValidationService
+from underwriting_validation.services.contract_validation_service import ContractValidationService
+from underwriting_validation.services.duplication_validation_service import DuplicationValidationService
 from underwriting_validation.infrastructure.contact_repository import ContactRepository
-from underwriting_validation.utils.validation_responses import format_combined_validation_response, format_error_response, format_no_data_response
+from underwriting_validation.utils.validation_responses import format_error_response, format_no_data_response, format_combined_validation_response
 from underwriting_validation.utils.combined_result_analyzer import CombinedResultAnalyzer
 from underwriting_validation.utils.pii_filter import mask_contact_id
+from underwriting_validation.utils.data_fetcher import DataFetcher
+from underwriting_validation.utils.analysis_orchestrator import AnalysisOrchestrator
+from underwriting_validation.utils.response_formatter import ResponseFormatter
 
 logger = logging.getLogger(__name__)
 
 class CombinedValidationService:
-    """Service for performing combined hardship, budget, address, and contract validation analysis."""
+    """Service for performing combined validation analysis."""
     
-    def __init__(self, hardship_service: HardshipValidationService, budget_service: BudgetValidationService, address_service: AddressValidationService, contract_service: ContractValidationService, duplication_service: DuplicationValidationService, repository: ContactRepository):
-        self.hardship_service = hardship_service
-        self.budget_service = budget_service
-        self.address_service = address_service
-        self.contract_service = contract_service
-        self.duplication_service = duplication_service
+    def __init__(
+        self, 
+        hardship_service: HardshipValidationService, 
+        budget_service: BudgetValidationService, 
+        address_service: AddressValidationService, 
+        contract_service: ContractValidationService, 
+        duplication_service: DuplicationValidationService, 
+        repository: ContactRepository
+    ):
         self.repository = repository
         self.analyzer = CombinedResultAnalyzer()
         
-        logger.info("CombinedValidationService initialized")
+        # Initialize specialized components
+        self.data_fetcher = DataFetcher(repository)
+        self.analysis_orchestrator = AnalysisOrchestrator(
+            hardship_service, budget_service, address_service, contract_service, duplication_service
+        )
+        self.response_formatter = ResponseFormatter()
+        
+        logger.info("CombinedValidationService initialized with modular components")
     
     async def perform_combined_validation(
         self, 
@@ -40,14 +52,14 @@ class CombinedValidationService:
         hardship_data: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Perform combined hardship, budget, and address validation analysis.
+        Perform combined validation analysis.
         
         Args:
             contact_id: The ID of the contact to analyze
             hardship_data: Optional pre-fetched hardship data to avoid duplicate queries
             
         Returns:
-            Dictionary containing combined hardship, budget, and address analysis results
+            Dictionary containing combined validation analysis results
         """
         try:
             # First check if contact is eligible for validation
@@ -57,249 +69,34 @@ class CombinedValidationService:
             if not eligibility_data or not eligibility_data.get('eligible', False):
                 logger.warning(f"Contact {masked_id} is not eligible for validation")
                 reason = eligibility_data.get('reason', 'Contact is not eligible for validation process') if eligibility_data else 'Contact not found'
-                return {
-                    "contact_id": contact_id,
-                    "eligibility": "not eligible",
-                    "success": False,
-                    "combined_result": "not_eligible",
-                    "combined_result_reason": reason,
-                    "message": f"Contact does not meet eligibility criteria: {reason}",
-                    "eligibility_data": eligibility_data,
-                    "hardship_data": None,
-                    "budget_data": None,
-                    "address_data": None,
-                    "contract_data": None,
-                    "duplication_data": None,
-                    "error": reason
-                }
+                return self._create_eligibility_error_response(contact_id, reason, eligibility_data)
             
             logger.info(f"Contact {masked_id} is eligible for validation")
             
-            # Use provided hardship data or fetch it
-            if hardship_data is None:
-                hardship_data = await self.repository.fetch_contact_with_hardship_data(contact_id)
+            # Fetch all data in parallel using the data fetcher
+            hardship_data, budget_data, address_data, contract_data, duplication_data = await self.data_fetcher.fetch_all_validation_data(
+                contact_id, hardship_data
+            )
             
-            # Get budget data using repository
-            budget_data = await self.repository.fetch_contact_with_budget_data(contact_id)
-            
-            # Get address data using repository
-            address_data = await self.repository.fetch_contact_with_address_data(contact_id)
-            
-            # Get contract data using repository
-            contract_data = await self.repository.fetch_contact_with_contract_data(contact_id)
-            
-            # Get duplication data using repository
-            raw_duplication_data = await self.repository.fetch_contact_with_duplication_data(contact_id)
+            # Check data availability using the data fetcher
+            data_availability = self.data_fetcher.check_data_availability(
+                hardship_data, budget_data, address_data, contract_data, duplication_data
+            )
             
             # Check if we have any data at all
-            has_hardship_data = hardship_data and any([
-                hardship_data.get('financial_hardship'),
-                hardship_data.get('hardship_description')
-            ])
+            if not any(data_availability.values()):
+                logger.warning(f"No validation data found for contact {masked_id}")
+                return self._create_no_data_response(contact_id, eligibility_data)
             
-            has_budget_data = budget_data and any([
-                budget_data.get('total_net_income', 0) > 0,
-                budget_data.get('total_expenses', 0) > 0
-            ])
+            # Run all LLM analyses in parallel using the analysis orchestrator
+            hardship_analysis, budget_analysis, address_analysis, contract_analysis, duplication_analysis = await self.analysis_orchestrator.run_parallel_analyses(
+                contact_id, hardship_data, budget_data, address_data, contract_data, duplication_data, data_availability
+            )
             
-            has_address_data = address_data and any([
-                address_data.get('state'),
-                address_data.get('assigned_company')
-            ])
-            
-            has_contract_data = contract_data and any([
-                contract_data.get('sender_ip_address'),
-                contract_data.get('signer_ip_address'),
-                contract_data.get('forth_email'),
-                contract_data.get('contract_email'),
-                contract_data.get('client_signature'),
-                contract_data.get('coclient_signature'),
-                contract_data.get('contract_account_number'),
-                contract_data.get('forth_account_number'),
-                contract_data.get('contract_routing_number'),
-                contract_data.get('forth_routing_number'),
-                contract_data.get('contract_bank_name'),
-                contract_data.get('forth_bank_name'),
-                contract_data.get('contract_account_type'),
-                contract_data.get('forth_account_type'),
-                contract_data.get('contract_address'),
-                contract_data.get('forth_address')
-            ])
-            
-            has_duplication_data = raw_duplication_data and not raw_duplication_data.get("error")
-            
-            if not has_hardship_data and not has_budget_data and not has_address_data and not has_contract_data and not has_duplication_data:
-                logger.warning(f"No hardship, budget, or address data found for contact {masked_id}")
-                return {
-                    "contact_id": contact_id,
-                    "eligibility": "eligible",
-                    "success": False,
-                    "combined_result": "no_data",
-                    "message": format_no_data_response(contact_id, "validation"),
-                    "eligibility_data": eligibility_data,
-                    "hardship_data": None,
-                    "budget_data": None,
-                    "address_data": None,
-                    "contract_data": None,
-                    "duplication_data": None,
-                    "error": "No contact data available"
-                }
-            
-            # Analyze hardship if data exists
-            hardship_analysis = None
-            hardship_validation_analysis = None
-            hardship_validation_result = None
-            hardship_confidence = None
-            if has_hardship_data:
-                hardship_result = await self.hardship_service.analyze_hardship_validity(hardship_data)
-                if not hardship_result.is_error():
-                    hardship_analysis = hardship_result.value
-                    hardship_validation_analysis = hardship_analysis.reason
-                    hardship_validation_result = hardship_analysis.result.value
-                    hardship_confidence = hardship_analysis.confidence
-                    logger.info(f"Hardship analysis for contact {masked_id}: result={hardship_validation_result}, confidence={hardship_confidence}")
-                else:
-                    logger.error(f"Hardship analysis failed for contact {masked_id}: {hardship_result.error}")
-            
-            # Analyze budget if data exists
-            budget_analysis = None
-            budget_difference = None
-            budget_outcome = None
-            budget_surplus_indication = None
-            if has_budget_data:
-                # Convert dictionary to Pydantic model for type safety
-                budget_data_model = BudgetDataIn(
-                    contact_id=budget_data['contact_id'],
-                    total_net_income=budget_data['total_net_income'],
-                    total_expenses=budget_data['total_expenses']
-                )
-                budget_result = await self.budget_service.analyze_budget_validity(budget_data_model)
-                if not budget_result.is_error():
-                    budget_analysis = budget_result.value
-                    budget_difference = budget_analysis.surplus
-                    budget_outcome = budget_analysis.result.value
-                    budget_surplus_indication = budget_analysis.surplus_indication
-                    logger.info(f"Budget analysis for contact {masked_id}: result={budget_outcome}, surplus={budget_surplus_indication}, difference=${budget_difference:,.2f}")
-                else:
-                    logger.error(f"Budget analysis failed for contact {masked_id}: {budget_result.error}")
-            
-            # Analyze address if data exists
-            address_analysis = None
-            address_validation_result = None
-            if has_address_data:
-                # Convert dictionary to Pydantic model for type safety
-                address_data_model = AddressDataIn(
-                    contact_id=address_data['contact_id'],
-                    state=address_data.get('state'),
-                    assigned_company=address_data.get('assigned_company')
-                )
-                address_result = await self.address_service.analyze_address_validity(address_data_model)
-                if not address_result.is_error():
-                    address_analysis = address_result.value
-                    address_validation_result = address_analysis.result.value
-                    logger.info(f"Address analysis for contact {masked_id}: result={address_validation_result}, state_check={address_analysis.state_check}")
-                else:
-                    logger.error(f"Address analysis failed for contact {masked_id}: {address_result.error}")
-            
-            # Analyze contract if data exists
-            contract_analysis = None
-            contract_validation_result = None
-            if has_contract_data:
-                # Convert dictionary to Pydantic model for type safety
-                contract_data_model = ContractDataIn(
-                    contact_id=contract_data['contact_id'],
-                    sender_ip_address=contract_data.get('sender_ip_address'),
-                    signer_ip_address=contract_data.get('signer_ip_address'),
-                    forth_email=contract_data.get('forth_email'),
-                    contract_email=contract_data.get('contract_email'),
-                    client_signature=contract_data.get('client_signature'),
-                    client_signature_date=contract_data.get('client_signature_date'),
-                    coclient_signature=contract_data.get('coclient_signature'),
-                    coclient_signature_date=contract_data.get('coclient_signature_date'),
-                    # Bank details
-                    contract_account_number=contract_data.get('contract_account_number'),
-                    forth_account_number=contract_data.get('forth_account_number'),
-                    contract_routing_number=contract_data.get('contract_routing_number'),
-                    forth_routing_number=contract_data.get('forth_routing_number'),
-                    contract_bank_name=contract_data.get('contract_bank_name'),
-                    forth_bank_name=contract_data.get('forth_bank_name'),
-                    contract_account_type=contract_data.get('contract_account_type'),
-                    forth_account_type=contract_data.get('forth_account_type'),
-                    contract_address=contract_data.get('contract_address'),
-                    forth_address=contract_data.get('forth_address'),
-                    # SSN validation fields
-                    payment_gateway_agreement_client_ssn=contract_data.get('payment_gateway_agreement_client_ssn'),
-                    legal_plan_agreement_client_ssn=contract_data.get('legal_plan_agreement_client_ssn'),
-                    power_of_attorney_client_ssn=contract_data.get('power_of_attorney_client_ssn'),
-                    credit_report_ssn=contract_data.get('credit_report_ssn'),
-                    ssn_check=contract_data.get('ssn_check'),
-                    # DOB validation fields
-                    forth_dob=contract_data.get('forth_dob'),
-                    contract_dob=contract_data.get('contract_dob'),
-                    dob_check=contract_data.get('dob_check'),
-                    age_plus_18_check=contract_data.get('age_plus_18_check'),
-                    # Debts validation fields
-                    forth_debt_count=contract_data.get('forth_debt_count'),
-                    contract_debt_count=contract_data.get('contract_debt_count'),
-                    debt_count_check=contract_data.get('debt_count_check')
-                )
-                contract_result = await self.contract_service.analyze_contract_validity(contract_data_model)
-                if not contract_result.is_error():
-                    contract_analysis = contract_result.value
-                    contract_validation_result = contract_analysis.result.value
-                    logger.info(f"Contract analysis for contact {masked_id}: result={contract_validation_result}, ip_address_validation={contract_analysis.ip_address_validation}, email_address_validation={contract_analysis.email_address_validation}, signature_validation={contract_analysis.signature_validation}, bank_account_validation={contract_analysis.bank_account_validation}")
-                else:
-                    logger.error(f"Contract analysis failed for contact {masked_id}: {contract_result.error}")
-            
-            # Analyze duplication if data exists
-            duplication_analysis = None
-            duplication_validation_result = None
-            if has_duplication_data:
-                # Convert dictionary to Pydantic model for type safety
-                duplication_data_model = DuplicationDataIn(
-                    contact_id=raw_duplication_data['contact_id'],
-                    ssn=raw_duplication_data.get('ssn'),
-                    phone=raw_duplication_data.get('phone')
-                )
-                duplication_result = await self.duplication_service.analyze_duplication_validity(duplication_data_model)
-                if not duplication_result.is_error():
-                    duplication_analysis = duplication_result.value
-                    duplication_validation_result = duplication_analysis.result
-                    logger.info(f"Duplication analysis for contact {masked_id}: result={duplication_validation_result}, has_duplicates={duplication_analysis.has_duplicates}")
-                else:
-                    logger.error(f"Duplication analysis failed for contact {masked_id}: {duplication_result.error}")
-            
-            # Build hardship data with validation outcome
-            formatted_hardship_data = None
-            if hardship_data:
-                formatted_hardship_data = {
-                    "financial_hardship": hardship_data.get('financial_hardship', ''),
-                    "hardship_description": hardship_data.get('hardship_description', ''),
-                    "hardship_validation_analysis": hardship_validation_analysis,
-                    "hardship_confidence": hardship_confidence,
-                    "hardship_validation_result": hardship_validation_result
-                }
-            
-            # Build budget data with difference
-            formatted_budget_data = None
-            if budget_data:
-                formatted_budget_data = {
-                    "total_net_income": budget_data.get('total_net_income', 0),
-                    "total_expenses": budget_data.get('total_expenses', 0),
-                    "budget_difference": budget_difference,
-                    "surplus_indication": budget_surplus_indication,
-                    "budget_outcome": budget_outcome
-                }
-            
-            # Build address data with validation outcome
-            formatted_address_data = None
-            if address_data:
-                formatted_address_data = {
-                    "state": address_data.get('state'),
-                    "assigned_company": address_data.get('assigned_company'),
-                    "state_check": address_data.get('state_check'),
-                    "address_validation_result": address_validation_result
-                }
+            # Format all data using the response formatter
+            formatted_hardship_data = self.response_formatter.format_hardship_data(hardship_data, hardship_analysis)
+            formatted_budget_data = self.response_formatter.format_budget_data(budget_data, budget_analysis)
+            formatted_address_data = self.response_formatter.format_address_data(address_data, address_analysis)
             
             # Build contract data with validation outcome using the new embedded pattern
             formatted_contract_data = None
@@ -380,21 +177,21 @@ class CombinedValidationService:
                     "debt_count_validation": contract_analysis.debt_count_validation,
                     
                     # Overall Contract Validation Result
-                    "contract_validation_result": contract_validation_result
+                    "contract_validation_result": contract_analysis.result.value if contract_analysis else None
                 }
             
             # Build duplication data with validation outcome
             formatted_duplication_data = None
-            if raw_duplication_data and duplication_analysis:
+            if duplication_data and duplication_analysis:
                 formatted_duplication_data = {
-                    "ssn": raw_duplication_data.get('ssn'),
-                    "phone": raw_duplication_data.get('phone'),
+                    "ssn": duplication_data.get('ssn'),
+                    "phone": duplication_data.get('phone'),
                     "has_duplicates": duplication_analysis.has_duplicates,
                     "ssn_duplicate_count": duplication_analysis.ssn_duplicate_count,
                     "phone_duplicate_count": duplication_analysis.phone_duplicate_count,
                     "ssn_duplicates": duplication_analysis.ssn_duplicates,
                     "phone_duplicates": duplication_analysis.phone_duplicates,
-                    "duplication_validation_result": duplication_validation_result,
+                    "duplication_validation_result": duplication_analysis.result if duplication_analysis else None,
                     "duplication_reason": duplication_analysis.reason
                 }
             
@@ -487,6 +284,50 @@ class CombinedValidationService:
             hardship_data: Pre-fetched hardship data
             
         Returns:
-            Dictionary containing combined hardship, budget, and address analysis results
+            Dictionary containing combined validation analysis results
         """
-        return await self.perform_combined_validation(contact_id, hardship_data) 
+        return await self.perform_combined_validation(contact_id, hardship_data)
+    
+    def _create_eligibility_error_response(
+        self, 
+        contact_id: int, 
+        reason: str, 
+        eligibility_data: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Create error response for ineligible contacts."""
+        return {
+            "contact_id": contact_id,
+            "eligibility": "not eligible",
+            "success": False,
+            "combined_result": "not_eligible",
+            "combined_result_reason": reason,
+            "message": f"Contact does not meet eligibility criteria: {reason}",
+            "eligibility_data": eligibility_data,
+            "hardship_data": None,
+            "budget_data": None,
+            "address_data": None,
+            "contract_data": None,
+            "duplication_data": None,
+            "error": reason
+        }
+    
+    def _create_no_data_response(
+        self, 
+        contact_id: int, 
+        eligibility_data: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Create response for contacts with no validation data."""
+        return {
+            "contact_id": contact_id,
+            "eligibility": "eligible",
+            "success": False,
+            "combined_result": "no_data",
+            "message": format_no_data_response(contact_id, "validation"),
+            "eligibility_data": eligibility_data,
+            "hardship_data": None,
+            "budget_data": None,
+            "address_data": None,
+            "contract_data": None,
+            "duplication_data": None,
+            "error": "No contact data available"
+        } 
