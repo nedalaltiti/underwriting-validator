@@ -18,11 +18,8 @@ class BudgetRepository:
     
     def __init__(self, session: AsyncSession):
         self.session = session
-        # Get budget field values from settings
-        self.budget_acctid = settings.budget_fields.acctid
-        self.budget_c_type = settings.budget_fields.c_type
-        self.budget_iscoapp = settings.budget_fields.iscoapp
-        self.budget_leadstatus = settings.budget_fields.leadstatus
+        # Budget repository doesn't need base query settings since eligibility check handles base conditions
+        pass
     
     async def fetch_contact_with_budget_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
         """Fetch contact with budget data using a single query."""
@@ -59,10 +56,8 @@ class BudgetRepository:
                         Contact.del_ != True
                     ),
                     # Additional filters from environment variables
-                    Contact.acctid == self.budget_acctid,
-                    Contact.c_type == self.budget_c_type,
-                    Contact.iscoapp == self.budget_iscoapp,
-                    Contact.leadstatus == self.budget_leadstatus
+                    # Base conditions are already checked by eligibility check
+                    Contact.id == bindparam('contact_id')
                 )
             )
             .group_by(

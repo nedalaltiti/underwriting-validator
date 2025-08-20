@@ -30,7 +30,8 @@ class CombinedResultAnalyzer:
         hardship_analysis: Optional[Dict[str, Any]] = None,
         budget_analysis: Optional[Dict[str, Any]] = None,
         address_analysis: Optional[Dict[str, Any]] = None,
-        contract_analysis: Optional[Dict[str, Any]] = None
+        contract_analysis: Optional[Dict[str, Any]] = None,
+        duplication_analysis: Optional[Dict[str, Any]] = None
     ) -> tuple[str, str]:
         """
         Analyze combined validation results and determine overall result with reasoning.
@@ -49,13 +50,14 @@ class CombinedResultAnalyzer:
         budget_result = self._extract_validation_result('budget', budget_analysis)
         address_result = self._extract_validation_result('address', address_analysis)
         contract_result = self._extract_validation_result('contract', contract_analysis)
+        duplication_result = self._extract_validation_result('duplication', duplication_analysis)
         
         # Get available validations
-        available_validations = [r for r in [hardship_result, budget_result, address_result, contract_result] if r is not None]
+        available_validations = [r for r in [hardship_result, budget_result, address_result, contract_result, duplication_result] if r is not None]
         
         # If no data for any validation
         if not available_validations:
-            return "no_data", "No validation data available for any category (hardship, budget, address, or contract)"
+            return "no_data", "No validation data available for any category (hardship, budget, address, contract, or duplication)"
         
         # Check if any validation returned "not_eligible"
         not_eligible_validations = [v for v in available_validations if v.result == "not_eligible"]
@@ -156,6 +158,22 @@ class CombinedResultAnalyzer:
                 type="contract",
                 result=result,
                 reason=f"IP: {ip_address_validation}, Email: {email_address_validation}, Signature: {signature_validation}, Bank: {bank_account_validation}, VLP Name: {vlp_name_validation}, SSN: {ssn_consistency_validation}, DOB: {dob_consistency_validation}, VLP Fees: {vlp_fees_validation}, VLP Plan: {vlp_plan_validation}, Gateway Sig: {gateway_signature_validation}, Payment Count: {payment_count_validation}, Payment Amounts: {payment_amounts_validation}, Payment Dates: {payment_dates_validation}"
+            )
+        elif validation_type == "duplication":
+            result = analysis_data.get('duplication_validation_result', 'no_data')
+            has_duplicates = analysis_data.get('has_duplicates', False)
+            ssn_duplicate_count = analysis_data.get('ssn_duplicate_count', 0)
+            phone_duplicate_count = analysis_data.get('phone_duplicate_count', 0)
+            if result == "no_data":
+                return ValidationResult(
+                    type="duplication",
+                    result="no_data",
+                    reason="No duplication data available"
+                )
+            return ValidationResult(
+                type="duplication",
+                result=result,
+                reason=f"Duplicates found: {has_duplicates}, SSN duplicates: {ssn_duplicate_count}, Phone duplicates: {phone_duplicate_count}"
             )
         
         return None

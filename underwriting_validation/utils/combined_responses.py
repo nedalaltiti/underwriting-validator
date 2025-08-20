@@ -14,7 +14,8 @@ def format_combined_validation_response(
     address_analysis: Any,
     contract_analysis: Any,
     combined_result: str,
-    contract_data: Optional[Any] = None
+    contract_data: Optional[Any] = None,
+    duplication_analysis: Optional[Any] = None
 ) -> str:
     """Format combined hardship, budget, address, and contract analysis into a comprehensive response."""
     response_parts = []
@@ -252,5 +253,58 @@ def format_combined_validation_response(
                 response_parts.append(f"  - ... and {len(payment_details) - 3} more payment(s)")
     else:
         response_parts.append("**Status:** No contract data available\n")
+    
+    # Duplication Analysis Section
+    response_parts.append("### **Duplication Validation**\n")
+    if duplication_analysis:
+        # Handle both DuplicationAnalysis object and dictionary
+        if hasattr(duplication_analysis, 'has_duplicates'):
+            # It's a DuplicationAnalysis object
+            duplication_status = "**NO PASS**" if duplication_analysis.has_duplicates else "**PASS**"
+            response_parts.append(f"**Status:** {duplication_status}\n")
+            response_parts.append(f"**SSN Duplicates:** {duplication_analysis.ssn_duplicate_count}\n")
+            response_parts.append(f"**Phone Duplicates:** {duplication_analysis.phone_duplicate_count}\n")
+            response_parts.append(f"**Reason:** {duplication_analysis.reason}\n")
+            
+            # Show duplicate details if any
+            ssn_duplicates = duplication_analysis.ssn_duplicates
+            phone_duplicates = duplication_analysis.phone_duplicates
+        else:
+            # It's a dictionary (formatted data)
+            duplication_status = "**NO PASS**" if duplication_analysis.get('has_duplicates', False) else "**PASS**"
+            response_parts.append(f"**Status:** {duplication_status}\n")
+            response_parts.append(f"**SSN Duplicates:** {duplication_analysis.get('ssn_duplicate_count', 0)}\n")
+            response_parts.append(f"**Phone Duplicates:** {duplication_analysis.get('phone_duplicate_count', 0)}\n")
+            response_parts.append(f"**Reason:** {duplication_analysis.get('duplication_reason', 'No reason provided')}\n")
+            
+            # Show duplicate details if any
+            ssn_duplicates = duplication_analysis.get('ssn_duplicates', [])
+            phone_duplicates = duplication_analysis.get('phone_duplicates', [])
+        
+        if ssn_duplicates:
+            response_parts.append("**SSN Duplicates Found:**\n")
+            for i, duplicate in enumerate(ssn_duplicates[:3], 1):  # Show first 3
+                if isinstance(duplicate, dict):
+                    response_parts.append(f"  {i}. Contact ID: {duplicate.get('id', 'Unknown')}")
+                    response_parts.append(f"     Status: {duplicate.get('contacts_lead_status', 'Unknown')}")
+                    response_parts.append(f"     Category: {duplicate.get('contact_categorie', 'Unknown')}\n")
+                else:
+                    response_parts.append(f"  {i}. Duplicate: {duplicate}\n")
+            if len(ssn_duplicates) > 3:
+                response_parts.append(f"  ... and {len(ssn_duplicates) - 3} more SSN duplicate(s)\n")
+        
+        if phone_duplicates:
+            response_parts.append("**Phone Duplicates Found:**\n")
+            for i, duplicate in enumerate(phone_duplicates[:3], 1):  # Show first 3
+                if isinstance(duplicate, dict):
+                    response_parts.append(f"  {i}. Contact ID: {duplicate.get('id', 'Unknown')}")
+                    response_parts.append(f"     Status: {duplicate.get('contacts_lead_status', 'Unknown')}")
+                    response_parts.append(f"     Category: {duplicate.get('contact_categorie', 'Unknown')}\n")
+                else:
+                    response_parts.append(f"  {i}. Duplicate: {duplicate}\n")
+            if len(phone_duplicates) > 3:
+                response_parts.append(f"  ... and {len(phone_duplicates) - 3} more phone duplicate(s)\n")
+    else:
+        response_parts.append("**Status:** No duplication data available\n")
     
     return "\n".join(response_parts)

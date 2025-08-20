@@ -284,7 +284,38 @@ class GoogleCloudSettings:
             location=get_env_var("GOOGLE_CLOUD_LOCATION", cls.location),
         )
 
-
+@dataclass(frozen=True)
+class BaseQuerySettings:
+    """Base query configuration that applies to all validation types."""
+    acctid: int = 2996  # Default account ID for all validations, simply a placeholder
+    c_type: int = 20588  # Default contact type for underwriting stage
+    iscoapp: int = 0  # Default iscoapp value (exclude co-app)
+    leadstatus: int = 134774  # Default lead status (Submitted status)
+    
+    @classmethod
+    def from_environment(cls) -> "BaseQuerySettings":
+        return cls(
+            acctid=get_env_var_int("BASE_ACCTID", 2996),
+            c_type=get_env_var_int("BASE_C_TYPE", 20588),
+            iscoapp=get_env_var_int("BASE_ISCOAPP", 0),
+            leadstatus=get_env_var_int("BASE_LEADSTATUS", 134774),
+        )
+    
+    def validate(self) -> bool:
+        """Validate that the field values are reasonable."""
+        if not (1 <= self.acctid <= 999999999999):
+            logger.error(f"Invalid base acctid: {self.acctid}")
+            return False
+        if not (1 <= self.c_type <= 999999999999):
+            logger.error(f"Invalid base c_type: {self.c_type}")
+            return False
+        if not (0 <= self.iscoapp <= 1):
+            logger.error(f"Invalid base iscoapp: {self.iscoapp}")
+            return False
+        if not (1 <= self.leadstatus <= 999999999999):
+            logger.error(f"Invalid base leadstatus: {self.leadstatus}")
+            return False
+        return True
 
 @dataclass(frozen=True)
 class HardshipFieldSettings:
@@ -316,73 +347,49 @@ class HardshipFieldSettings:
 @dataclass(frozen=True)
 class BudgetFieldSettings:
     """Budget field ID configuration for database queries."""
-    acctid: int = 1  # Default account ID
-    c_type: int = 2  # Default contact type
-    iscoapp: int = 0  # Default iscoapp value
-    leadstatus: int = 3  # Default lead status
+    # No additional fields needed - uses base query settings
     
     @classmethod
     def from_environment(cls) -> "BudgetFieldSettings":
-        return cls(
-            acctid=get_env_var_int("BUDGET_ACCTID", 1),
-            c_type=get_env_var_int("BUDGET_C_TYPE", 2),
-            iscoapp=get_env_var_int("BUDGET_ISCOAPP", 0),
-            leadstatus=get_env_var_int("BUDGET_LEADSTATUS", 3),
-        )
+        return cls()
     
     def validate(self) -> bool:
         """Validate that the field values are reasonable."""
-        # Check that values are within reasonable ranges
-        if not (1 <= self.acctid <= 999999999999):
-            logger.error(f"Invalid budget acctid: {self.acctid}")
-            return False
-        if not (1 <= self.c_type <= 999999999999):
-            logger.error(f"Invalid budget c_type: {self.c_type}")
-            return False
-        if not (0 <= self.iscoapp <= 1):
-            logger.error(f"Invalid budget iscoapp: {self.iscoapp}")
-            return False
-        if not (1 <= self.leadstatus <= 999999999999):
-            logger.error(f"Invalid budget leadstatus: {self.leadstatus}")
-            return False
         return True
 
 @dataclass(frozen=True)
 class AddressFieldSettings:
     """Address validation field configuration for database queries."""
-    acctid: int = 2996  # Default account ID for address validation
-    c_type: int = 20588  # Default contact type for underwriting stage
-    iscoapp: int = 0  # Default iscoapp value (exclude co-app)
-    leadstatus: int = 134774  # Default lead status (Submitted status)
     company_type: int = 2  # Default company type for filtering
     
     @classmethod
     def from_environment(cls) -> "AddressFieldSettings":
         return cls(
-            acctid=get_env_var_int("ADDRESS_ACCTID", 2996),
-            c_type=get_env_var_int("ADDRESS_C_TYPE", 20588),
-            iscoapp=get_env_var_int("ADDRESS_ISCOAPP", 0),
-            leadstatus=get_env_var_int("ADDRESS_LEADSTATUS", 134774),
             company_type=get_env_var_int("ADDRESS_COMPANY_TYPE", 2),
         )
     
     def validate(self) -> bool:
         """Validate that the field values are reasonable."""
-        # Check that values are within reasonable ranges
-        if not (1 <= self.acctid <= 999999999999):
-            logger.error(f"Invalid address acctid: {self.acctid}")
-            return False
-        if not (1 <= self.c_type <= 999999999999):
-            logger.error(f"Invalid address c_type: {self.c_type}")
-            return False
-        if not (0 <= self.iscoapp <= 1):
-            logger.error(f"Invalid address iscoapp: {self.iscoapp}")
-            return False
-        if not (1 <= self.leadstatus <= 999999999999):
-            logger.error(f"Invalid address leadstatus: {self.leadstatus}")
-            return False
         if not (1 <= self.company_type <= 10):
             logger.error(f"Invalid address company_type: {self.company_type}")
+            return False
+        return True
+
+@dataclass(frozen=True)
+class DuplicationFieldSettings:
+    """Duplication validation field configuration for database queries."""
+    exclude_contact_id: int = 5783  # Default contact ID to exclude from duplication checks
+    
+    @classmethod
+    def from_environment(cls) -> "DuplicationFieldSettings":
+        return cls(
+            exclude_contact_id=get_env_var_int("DUPLICATION_EXCLUDE_CONTACT_ID", 5783),
+        )
+    
+    def validate(self) -> bool:
+        """Validate that the field values are reasonable."""
+        if not (1 <= self.exclude_contact_id <= 999999999999):
+            logger.error(f"Invalid duplication exclude_contact_id: {self.exclude_contact_id}")
             return False
         return True
 
@@ -397,15 +404,22 @@ class AppSettings:
     db: DatabaseSettings = field(default_factory=DatabaseSettings.from_environment)
     gemini: GeminiSettings = field(default_factory=GeminiSettings.from_environment)
     google_cloud: GoogleCloudSettings = field(default_factory=GoogleCloudSettings.from_environment)
+    base_query: BaseQuerySettings = field(default_factory=BaseQuerySettings.from_environment)
     hardship_fields: HardshipFieldSettings = field(default_factory=HardshipFieldSettings.from_environment)
     budget_fields: BudgetFieldSettings = field(default_factory=BudgetFieldSettings.from_environment)
     address_fields: AddressFieldSettings = field(default_factory=AddressFieldSettings.from_environment)
+    duplication_fields: DuplicationFieldSettings = field(default_factory=DuplicationFieldSettings.from_environment)
 
     @classmethod
     def from_environment(cls) -> "AppSettings":
         # Default CORS origins if not specified in environment
         default_cors_origins = ["*"]
         logger.info("Environment variables loaded; building AppSettings")
+        
+        # Create base query settings and validate them
+        base_query = BaseQuerySettings.from_environment()
+        if not base_query.validate():
+            raise ValueError("Invalid base query configuration")
         
         # Create hardship field settings and validate them
         hardship_fields = HardshipFieldSettings.from_environment()
@@ -422,17 +436,26 @@ class AppSettings:
         if not address_fields.validate():
             raise ValueError("Invalid address field configuration")
         
+        # Create duplication field settings and validate them
+        duplication_fields = DuplicationFieldSettings.from_environment()
+        if not duplication_fields.validate():
+            raise ValueError("Invalid duplication field configuration")
+        
+        logger.info(f"Base query configuration: acctid={base_query.acctid}, c_type={base_query.c_type}, iscoapp={base_query.iscoapp}, leadstatus={base_query.leadstatus}")
         logger.info(f"Hardship field configuration: financial_id={hardship_fields.financial_hardship_id}, description_id={hardship_fields.hardship_description_id}")
-        logger.info(f"Budget field configuration: acctid={budget_fields.acctid}, c_type={budget_fields.c_type}, iscoapp={budget_fields.iscoapp}, leadstatus={budget_fields.leadstatus}")
-        logger.info(f"Address field configuration: acctid={address_fields.acctid}, c_type={address_fields.c_type}, iscoapp={address_fields.iscoapp}, leadstatus={address_fields.leadstatus}")
+        logger.info(f"Budget field configuration: uses base query settings")
+        logger.info(f"Address field configuration: company_type={address_fields.company_type}")
+        logger.info(f"Duplication field configuration: exclude_contact_id={duplication_fields.exclude_contact_id}")
         
         return cls(
             db=DatabaseSettings.from_environment(),
             gemini=GeminiSettings.from_environment(),
             google_cloud=GoogleCloudSettings.from_environment(),
+            base_query=base_query,
             hardship_fields=hardship_fields,
             budget_fields=budget_fields,
             address_fields=address_fields,
+            duplication_fields=duplication_fields,
             app_name=get_env_var("APP_NAME", cls.app_name),
             app_description=get_env_var("APP_DESCRIPTION", cls.app_description),
             host=get_env_var("HOST", cls.host),

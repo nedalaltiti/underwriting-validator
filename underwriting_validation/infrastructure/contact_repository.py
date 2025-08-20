@@ -16,6 +16,7 @@ from underwriting_validation.infrastructure.hardship_repository import HardshipR
 from underwriting_validation.infrastructure.address_repository import AddressRepository
 from underwriting_validation.infrastructure.eligibility_repository import EligibilityRepository
 from underwriting_validation.infrastructure.contract_repository import ContractRepository
+from underwriting_validation.infrastructure.duplication_repository import DuplicationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class ContactRepository:
         self.address_repo = AddressRepository(session)
         self.eligibility_repo = EligibilityRepository(session)
         self.contract_repo = ContractRepository(session)
+        self.duplication_repo = DuplicationRepository(session)
         
         logger.info("ContactRepository initialized with specialized repositories")
     
@@ -68,3 +70,8 @@ class ContactRepository:
     async def fetch_contact_with_contract_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
         """Fetch contact with contract validation data using multiple queries."""
         return await self.contract_repo.fetch_contact_with_contract_data(contact_id)
+    
+    # Duplication operations
+    async def fetch_contact_with_duplication_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
+        """Fetch contact with duplication validation data."""
+        return await self.duplication_repo.check_contact_duplication(contact_id)

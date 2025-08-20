@@ -18,11 +18,7 @@ class AddressRepository:
     
     def __init__(self, session: AsyncSession):
         self.session = session
-        # Get address field values from settings
-        self.address_acctid = settings.address_fields.acctid
-        self.address_c_type = settings.address_fields.c_type
-        self.address_iscoapp = settings.address_fields.iscoapp
-        self.address_leadstatus = settings.address_fields.leadstatus
+        # Get address-specific field values from settings
         self.address_company_type = settings.address_fields.company_type
     
     async def fetch_contact_with_address_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
@@ -60,12 +56,6 @@ class AddressRepository:
             .where(
                 and_(
                     Contact.id == bindparam('contact_id'),
-                    # Address validation filters from environment variables
-                    Contact.acctid == self.address_acctid,
-                    Contact.c_type == self.address_c_type,
-                    Contact.del_ == False,  # Exclude deleted clients
-                    Contact.iscoapp == self.address_iscoapp,  # Exclude co-app
-                    Contact.leadstatus == self.address_leadstatus  # Include just leads with Submitted status
                 )
             )
         )

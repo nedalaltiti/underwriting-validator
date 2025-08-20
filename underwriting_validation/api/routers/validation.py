@@ -52,6 +52,7 @@ class CombinedValidationResponse(BaseModel):
     budget_data: Optional[Dict[str, Any]] = None
     address_data: Optional[Dict[str, Any]] = None
     contract_data: Optional[Dict[str, Any]] = None
+    duplication_data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
 @router.post("/contact", 
@@ -184,6 +185,8 @@ async def validate_contact_combined(
             hardship_data=None,
             budget_data=None,
             address_data=None,
+            contract_data=None,
+            duplication_data=None,
             error="No contact data available"
         )
         
@@ -199,6 +202,7 @@ async def validate_contact_combined(
             budget_data=result.get("budget_data"),
             address_data=result.get("address_data"),
             contract_data=result.get("contract_data"),
+            duplication_data=result.get("duplication_data"),
             error=result.get("error")
         )
         
@@ -219,6 +223,7 @@ async def validate_contact_combined(
             budget_data=None,
             address_data=None,
             contract_data=None,
+            duplication_data=None,
             error=str(e)
         )
 

@@ -12,6 +12,7 @@ from underwriting_validation.services.hardship_validation_service import Hardshi
 from underwriting_validation.services.budget_validation_service import BudgetValidationService, BudgetDataIn
 from underwriting_validation.services.address_validation_service import AddressValidationService, AddressDataIn
 from underwriting_validation.services.contract_validation_service import ContractValidationService, ContractDataIn
+from underwriting_validation.services.duplication_validation_service import DuplicationValidationService, DuplicationDataIn
 from underwriting_validation.infrastructure.contact_repository import ContactRepository
 from underwriting_validation.utils.validation_responses import format_combined_validation_response, format_error_response, format_no_data_response
 from underwriting_validation.utils.combined_result_analyzer import CombinedResultAnalyzer
@@ -22,11 +23,12 @@ logger = logging.getLogger(__name__)
 class CombinedValidationService:
     """Service for performing combined hardship, budget, address, and contract validation analysis."""
     
-    def __init__(self, hardship_service: HardshipValidationService, budget_service: BudgetValidationService, address_service: AddressValidationService, contract_service: ContractValidationService, repository: ContactRepository):
+    def __init__(self, hardship_service: HardshipValidationService, budget_service: BudgetValidationService, address_service: AddressValidationService, contract_service: ContractValidationService, duplication_service: DuplicationValidationService, repository: ContactRepository):
         self.hardship_service = hardship_service
         self.budget_service = budget_service
         self.address_service = address_service
         self.contract_service = contract_service
+        self.duplication_service = duplication_service
         self.repository = repository
         self.analyzer = CombinedResultAnalyzer()
         
@@ -67,6 +69,7 @@ class CombinedValidationService:
                     "budget_data": None,
                     "address_data": None,
                     "contract_data": None,
+                    "duplication_data": None,
                     "error": reason
                 }
             
@@ -84,6 +87,9 @@ class CombinedValidationService:
             
             # Get contract data using repository
             contract_data = await self.repository.fetch_contact_with_contract_data(contact_id)
+            
+            # Get duplication data using repository
+            raw_duplication_data = await self.repository.fetch_contact_with_duplication_data(contact_id)
             
             # Check if we have any data at all
             has_hardship_data = hardship_data and any([
@@ -120,7 +126,9 @@ class CombinedValidationService:
                 contract_data.get('forth_address')
             ])
             
-            if not has_hardship_data and not has_budget_data and not has_address_data and not has_contract_data:
+            has_duplication_data = raw_duplication_data and not raw_duplication_data.get("error")
+            
+            if not has_hardship_data and not has_budget_data and not has_address_data and not has_contract_data and not has_duplication_data:
                 logger.warning(f"No hardship, budget, or address data found for contact {masked_id}")
                 return {
                     "contact_id": contact_id,
@@ -133,6 +141,7 @@ class CombinedValidationService:
                     "budget_data": None,
                     "address_data": None,
                     "contract_data": None,
+                    "duplication_data": None,
                     "error": "No contact data available"
                 }
             
@@ -241,6 +250,24 @@ class CombinedValidationService:
                     logger.info(f"Contract analysis for contact {masked_id}: result={contract_validation_result}, ip_address_validation={contract_analysis.ip_address_validation}, email_address_validation={contract_analysis.email_address_validation}, signature_validation={contract_analysis.signature_validation}, bank_account_validation={contract_analysis.bank_account_validation}")
                 else:
                     logger.error(f"Contract analysis failed for contact {masked_id}: {contract_result.error}")
+            
+            # Analyze duplication if data exists
+            duplication_analysis = None
+            duplication_validation_result = None
+            if has_duplication_data:
+                # Convert dictionary to Pydantic model for type safety
+                duplication_data_model = DuplicationDataIn(
+                    contact_id=raw_duplication_data['contact_id'],
+                    ssn=raw_duplication_data.get('ssn'),
+                    phone=raw_duplication_data.get('phone')
+                )
+                duplication_result = await self.duplication_service.analyze_duplication_validity(duplication_data_model)
+                if not duplication_result.is_error():
+                    duplication_analysis = duplication_result.value
+                    duplication_validation_result = duplication_analysis.result
+                    logger.info(f"Duplication analysis for contact {masked_id}: result={duplication_validation_result}, has_duplicates={duplication_analysis.has_duplicates}")
+                else:
+                    logger.error(f"Duplication analysis failed for contact {masked_id}: {duplication_result.error}")
             
             # Build hardship data with validation outcome
             formatted_hardship_data = None
@@ -356,19 +383,35 @@ class CombinedValidationService:
                     "contract_validation_result": contract_validation_result
                 }
             
+            # Build duplication data with validation outcome
+            formatted_duplication_data = None
+            if raw_duplication_data and duplication_analysis:
+                formatted_duplication_data = {
+                    "ssn": raw_duplication_data.get('ssn'),
+                    "phone": raw_duplication_data.get('phone'),
+                    "has_duplicates": duplication_analysis.has_duplicates,
+                    "ssn_duplicate_count": duplication_analysis.ssn_duplicate_count,
+                    "phone_duplicate_count": duplication_analysis.phone_duplicate_count,
+                    "ssn_duplicates": duplication_analysis.ssn_duplicates,
+                    "phone_duplicates": duplication_analysis.phone_duplicates,
+                    "duplication_validation_result": duplication_validation_result,
+                    "duplication_reason": duplication_analysis.reason
+                }
+            
             # Determine combined result and reason using the analyzer
             combined_result, combined_result_reason = self.analyzer.analyze_combined_result(
                 hardship_analysis=formatted_hardship_data,
                 budget_analysis=formatted_budget_data,
                 address_analysis=formatted_address_data,
-                contract_analysis=formatted_contract_data
+                contract_analysis=formatted_contract_data,
+                duplication_analysis=formatted_duplication_data
             )
             logger.info(f"Combined validation result for contact {masked_id}: {combined_result} - {combined_result_reason}")
             
             # Format combined response
             formatted_response = self._format_combined_response(
                 contact_id, hardship_data, budget_data, address_data, contract_data,
-                hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result
+                hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result, duplication_analysis
             )
             
             return {
@@ -383,6 +426,7 @@ class CombinedValidationService:
                 "budget_data": formatted_budget_data,
                 "address_data": formatted_address_data,
                 "contract_data": formatted_contract_data,
+                "duplication_data": formatted_duplication_data,
                 "error": None
             }
             
@@ -400,6 +444,7 @@ class CombinedValidationService:
                 "budget_data": None,
                 "address_data": None,
                 "contract_data": None,
+                "duplication_data": None,
                 "error": str(e)
             }
     
@@ -416,13 +461,14 @@ class CombinedValidationService:
         budget_analysis, 
         address_analysis, 
         contract_analysis, 
-        combined_result: str
+        combined_result: str,
+        duplication_analysis=None
     ) -> str:
         """
-        Format combined hardship, budget, address, and contract analysis into a comprehensive response.
+        Format combined hardship, budget, address, contract, and duplication analysis into a comprehensive response.
         """
         return format_combined_validation_response(
-            contact_id, hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result, contract_data
+            contact_id, hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result, contract_data, duplication_analysis
         )
     
     async def validate_contact_with_prefetched_data(
