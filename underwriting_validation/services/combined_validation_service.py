@@ -1,8 +1,8 @@
 """
 Combined Validation Service for Underwriting
 
-This service handles combined hardship and budget validation analysis.
-It provides a unified interface for analyzing both hardship and budget data
+This service handles combined hardship, budget, and address validation analysis.
+It provides a unified interface for analyzing hardship, budget, and address data
 for a given contact ID.
 """
 
@@ -10,18 +10,25 @@ import logging
 from typing import Optional, Dict, Any
 from underwriting_validation.services.hardship_validation_service import HardshipValidationService
 from underwriting_validation.services.budget_validation_service import BudgetValidationService, BudgetDataIn
+from underwriting_validation.services.address_validation_service import AddressValidationService, AddressDataIn
+from underwriting_validation.services.contract_validation_service import ContractValidationService, ContractDataIn
 from underwriting_validation.infrastructure.contact_repository import ContactRepository
 from underwriting_validation.utils.validation_responses import format_combined_validation_response, format_error_response, format_no_data_response
+from underwriting_validation.utils.combined_result_analyzer import CombinedResultAnalyzer
+from underwriting_validation.utils.pii_filter import mask_contact_id
 
 logger = logging.getLogger(__name__)
 
 class CombinedValidationService:
-    """Service for performing combined hardship and budget validation analysis."""
+    """Service for performing combined hardship, budget, address, and contract validation analysis."""
     
-    def __init__(self, hardship_service: HardshipValidationService, budget_service: BudgetValidationService, repository: ContactRepository):
+    def __init__(self, hardship_service: HardshipValidationService, budget_service: BudgetValidationService, address_service: AddressValidationService, contract_service: ContractValidationService, repository: ContactRepository):
         self.hardship_service = hardship_service
         self.budget_service = budget_service
+        self.address_service = address_service
+        self.contract_service = contract_service
         self.repository = repository
+        self.analyzer = CombinedResultAnalyzer()
         
         logger.info("CombinedValidationService initialized")
     
@@ -31,22 +38,52 @@ class CombinedValidationService:
         hardship_data: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Perform combined hardship and budget validation analysis.
+        Perform combined hardship, budget, and address validation analysis.
         
         Args:
             contact_id: The ID of the contact to analyze
             hardship_data: Optional pre-fetched hardship data to avoid duplicate queries
             
         Returns:
-            Dictionary containing combined hardship and budget analysis results
+            Dictionary containing combined hardship, budget, and address analysis results
         """
         try:
+            # First check if contact is eligible for validation
+            masked_id = mask_contact_id(contact_id)
+            logger.info(f"Checking eligibility for contact {masked_id}")
+            eligibility_data = await self.repository.check_contact_eligibility(contact_id)
+            if not eligibility_data or not eligibility_data.get('eligible', False):
+                logger.warning(f"Contact {masked_id} is not eligible for validation")
+                reason = eligibility_data.get('reason', 'Contact is not eligible for validation process') if eligibility_data else 'Contact not found'
+                return {
+                    "contact_id": contact_id,
+                    "eligibility": "not eligible",
+                    "success": False,
+                    "combined_result": "not_eligible",
+                    "combined_result_reason": reason,
+                    "message": f"Contact does not meet eligibility criteria: {reason}",
+                    "eligibility_data": eligibility_data,
+                    "hardship_data": None,
+                    "budget_data": None,
+                    "address_data": None,
+                    "contract_data": None,
+                    "error": reason
+                }
+            
+            logger.info(f"Contact {masked_id} is eligible for validation")
+            
             # Use provided hardship data or fetch it
             if hardship_data is None:
                 hardship_data = await self.repository.fetch_contact_with_hardship_data(contact_id)
             
             # Get budget data using repository
             budget_data = await self.repository.fetch_contact_with_budget_data(contact_id)
+            
+            # Get address data using repository
+            address_data = await self.repository.fetch_contact_with_address_data(contact_id)
+            
+            # Get contract data using repository
+            contract_data = await self.repository.fetch_contact_with_contract_data(contact_id)
             
             # Check if we have any data at all
             has_hardship_data = hardship_data and any([
@@ -59,27 +96,67 @@ class CombinedValidationService:
                 budget_data.get('total_expenses', 0) > 0
             ])
             
-            if not has_hardship_data and not has_budget_data:
-                logger.warning(f"No hardship or budget data found for contact {contact_id}")
+            has_address_data = address_data and any([
+                address_data.get('state'),
+                address_data.get('assigned_company')
+            ])
+            
+            has_contract_data = contract_data and any([
+                contract_data.get('sender_ip_address'),
+                contract_data.get('signer_ip_address'),
+                contract_data.get('forth_email'),
+                contract_data.get('contract_email'),
+                contract_data.get('client_signature'),
+                contract_data.get('coclient_signature'),
+                contract_data.get('contract_account_number'),
+                contract_data.get('forth_account_number'),
+                contract_data.get('contract_routing_number'),
+                contract_data.get('forth_routing_number'),
+                contract_data.get('contract_bank_name'),
+                contract_data.get('forth_bank_name'),
+                contract_data.get('contract_account_type'),
+                contract_data.get('forth_account_type'),
+                contract_data.get('contract_address'),
+                contract_data.get('forth_address')
+            ])
+            
+            if not has_hardship_data and not has_budget_data and not has_address_data and not has_contract_data:
+                logger.warning(f"No hardship, budget, or address data found for contact {masked_id}")
                 return {
                     "contact_id": contact_id,
-                    "hardship_analysis": None,
-                    "budget_analysis": None,
+                    "eligibility": "eligible",
+                    "success": False,
                     "combined_result": "no_data",
-                    "formatted_response": format_no_data_response(contact_id, "validation")
+                    "message": format_no_data_response(contact_id, "validation"),
+                    "eligibility_data": eligibility_data,
+                    "hardship_data": None,
+                    "budget_data": None,
+                    "address_data": None,
+                    "contract_data": None,
+                    "error": "No contact data available"
                 }
             
             # Analyze hardship if data exists
             hardship_analysis = None
+            hardship_validation_analysis = None
+            hardship_validation_result = None
+            hardship_confidence = None
             if has_hardship_data:
                 hardship_result = await self.hardship_service.analyze_hardship_validity(hardship_data)
                 if not hardship_result.is_error():
                     hardship_analysis = hardship_result.value
+                    hardship_validation_analysis = hardship_analysis.reason
+                    hardship_validation_result = hardship_analysis.result.value
+                    hardship_confidence = hardship_analysis.confidence
+                    logger.info(f"Hardship analysis for contact {masked_id}: result={hardship_validation_result}, confidence={hardship_confidence}")
                 else:
-                    logger.error(f"Hardship analysis failed for contact {contact_id}: {hardship_result.error}")
+                    logger.error(f"Hardship analysis failed for contact {masked_id}: {hardship_result.error}")
             
             # Analyze budget if data exists
             budget_analysis = None
+            budget_difference = None
+            budget_outcome = None
+            budget_surplus_indication = None
             if has_budget_data:
                 # Convert dictionary to Pydantic model for type safety
                 budget_data_model = BudgetDataIn(
@@ -90,105 +167,262 @@ class CombinedValidationService:
                 budget_result = await self.budget_service.analyze_budget_validity(budget_data_model)
                 if not budget_result.is_error():
                     budget_analysis = budget_result.value
+                    budget_difference = budget_analysis.surplus
+                    budget_outcome = budget_analysis.result.value
+                    budget_surplus_indication = budget_analysis.surplus_indication
+                    logger.info(f"Budget analysis for contact {masked_id}: result={budget_outcome}, surplus={budget_surplus_indication}, difference=${budget_difference:,.2f}")
                 else:
-                    logger.error(f"Budget analysis failed for contact {contact_id}: {budget_result.error}")
+                    logger.error(f"Budget analysis failed for contact {masked_id}: {budget_result.error}")
             
-            # Determine combined result
-            combined_result = self._determine_combined_result(hardship_analysis, budget_analysis)
+            # Analyze address if data exists
+            address_analysis = None
+            address_validation_result = None
+            if has_address_data:
+                # Convert dictionary to Pydantic model for type safety
+                address_data_model = AddressDataIn(
+                    contact_id=address_data['contact_id'],
+                    state=address_data.get('state'),
+                    assigned_company=address_data.get('assigned_company')
+                )
+                address_result = await self.address_service.analyze_address_validity(address_data_model)
+                if not address_result.is_error():
+                    address_analysis = address_result.value
+                    address_validation_result = address_analysis.result.value
+                    logger.info(f"Address analysis for contact {masked_id}: result={address_validation_result}, state_check={address_analysis.state_check}")
+                else:
+                    logger.error(f"Address analysis failed for contact {masked_id}: {address_result.error}")
+            
+            # Analyze contract if data exists
+            contract_analysis = None
+            contract_validation_result = None
+            if has_contract_data:
+                # Convert dictionary to Pydantic model for type safety
+                contract_data_model = ContractDataIn(
+                    contact_id=contract_data['contact_id'],
+                    sender_ip_address=contract_data.get('sender_ip_address'),
+                    signer_ip_address=contract_data.get('signer_ip_address'),
+                    forth_email=contract_data.get('forth_email'),
+                    contract_email=contract_data.get('contract_email'),
+                    client_signature=contract_data.get('client_signature'),
+                    client_signature_date=contract_data.get('client_signature_date'),
+                    coclient_signature=contract_data.get('coclient_signature'),
+                    coclient_signature_date=contract_data.get('coclient_signature_date'),
+                    # Bank details
+                    contract_account_number=contract_data.get('contract_account_number'),
+                    forth_account_number=contract_data.get('forth_account_number'),
+                    contract_routing_number=contract_data.get('contract_routing_number'),
+                    forth_routing_number=contract_data.get('forth_routing_number'),
+                    contract_bank_name=contract_data.get('contract_bank_name'),
+                    forth_bank_name=contract_data.get('forth_bank_name'),
+                    contract_account_type=contract_data.get('contract_account_type'),
+                    forth_account_type=contract_data.get('forth_account_type'),
+                    contract_address=contract_data.get('contract_address'),
+                    forth_address=contract_data.get('forth_address'),
+                    # SSN validation fields
+                    payment_gateway_agreement_client_ssn=contract_data.get('payment_gateway_agreement_client_ssn'),
+                    legal_plan_agreement_client_ssn=contract_data.get('legal_plan_agreement_client_ssn'),
+                    power_of_attorney_client_ssn=contract_data.get('power_of_attorney_client_ssn'),
+                    credit_report_ssn=contract_data.get('credit_report_ssn'),
+                    ssn_check=contract_data.get('ssn_check'),
+                    # DOB validation fields
+                    forth_dob=contract_data.get('forth_dob'),
+                    contract_dob=contract_data.get('contract_dob'),
+                    dob_check=contract_data.get('dob_check'),
+                    age_plus_18_check=contract_data.get('age_plus_18_check'),
+                    # Debts validation fields
+                    forth_debt_count=contract_data.get('forth_debt_count'),
+                    contract_debt_count=contract_data.get('contract_debt_count'),
+                    debt_count_check=contract_data.get('debt_count_check')
+                )
+                contract_result = await self.contract_service.analyze_contract_validity(contract_data_model)
+                if not contract_result.is_error():
+                    contract_analysis = contract_result.value
+                    contract_validation_result = contract_analysis.result.value
+                    logger.info(f"Contract analysis for contact {masked_id}: result={contract_validation_result}, ip_address_validation={contract_analysis.ip_address_validation}, email_address_validation={contract_analysis.email_address_validation}, signature_validation={contract_analysis.signature_validation}, bank_account_validation={contract_analysis.bank_account_validation}")
+                else:
+                    logger.error(f"Contract analysis failed for contact {masked_id}: {contract_result.error}")
+            
+            # Build hardship data with validation outcome
+            formatted_hardship_data = None
+            if hardship_data:
+                formatted_hardship_data = {
+                    "financial_hardship": hardship_data.get('financial_hardship', ''),
+                    "hardship_description": hardship_data.get('hardship_description', ''),
+                    "hardship_validation_analysis": hardship_validation_analysis,
+                    "hardship_confidence": hardship_confidence,
+                    "hardship_validation_result": hardship_validation_result
+                }
+            
+            # Build budget data with difference
+            formatted_budget_data = None
+            if budget_data:
+                formatted_budget_data = {
+                    "total_net_income": budget_data.get('total_net_income', 0),
+                    "total_expenses": budget_data.get('total_expenses', 0),
+                    "budget_difference": budget_difference,
+                    "surplus_indication": budget_surplus_indication,
+                    "budget_outcome": budget_outcome
+                }
+            
+            # Build address data with validation outcome
+            formatted_address_data = None
+            if address_data:
+                formatted_address_data = {
+                    "state": address_data.get('state'),
+                    "assigned_company": address_data.get('assigned_company'),
+                    "state_check": address_data.get('state_check'),
+                    "address_validation_result": address_validation_result
+                }
+            
+            # Build contract data with validation outcome using the new embedded pattern
+            formatted_contract_data = None
+            if contract_data and contract_analysis:
+                formatted_contract_data = {
+                    # IP Address Validation
+                    "sender_ip_address": contract_data.get('sender_ip_address'),
+                    "signer_ip_address": contract_data.get('signer_ip_address'),
+                    "ip_address_validation": contract_analysis.ip_address_validation,
+                    
+                    # Email Validation
+                    "forth_email": contract_data.get('forth_email'),
+                    "contract_email": contract_data.get('contract_email'),
+                    "email_address_validation": contract_analysis.email_address_validation,
+                    
+                    # Signature Validation
+                    "client_signature": contract_data.get('client_signature'),
+                    "coclient_signature": contract_data.get('coclient_signature'),
+                    "signature_validation": contract_analysis.signature_validation,
+                    
+                    # Bank Account Validation
+                    "contract_account_number": contract_data.get('contract_account_number'),
+                    "forth_account_number": contract_data.get('forth_account_number'),
+                    "contract_routing_number": contract_data.get('contract_routing_number'),
+                    "forth_routing_number": contract_data.get('forth_routing_number'),
+                    "contract_bank_name": contract_data.get('contract_bank_name'),
+                    "forth_bank_name": contract_data.get('forth_bank_name'),
+                    "contract_account_type": contract_data.get('contract_account_type'),
+                    "forth_account_type": contract_data.get('forth_account_type'),
+                    "contract_address": contract_data.get('contract_address'),
+                    "forth_address": contract_data.get('forth_address'),
+                    "bank_account_validation": contract_analysis.bank_account_validation,
+                    
+                    # VLP (Voluntary Legal Plan) Validation
+                    "legal_plan_provider": contract_data.get('legal_plan_provider'),
+                    "vlp_client_signature": contract_data.get('vlp_client_signature'),
+                    "vlp_signature_date": contract_data.get('vlp_signature_date'),
+                    "contract_name": contract_data.get('contract_name'),
+                    "forth_name": contract_data.get('forth_name'),
+                    "vlp_name_validation": contract_analysis.vlp_name_validation,
+                    "contract_ssn": contract_data.get('contract_ssn'),
+                    "forth_ssn": contract_data.get('forth_ssn'),
+                    "legal_setup_fee_snapshot": contract_data.get('legal_setup_fee_snapshot'),
+                    "legal_monthly_fee_snapshot": contract_data.get('legal_monthly_fee_snapshot'),
+                    "legal_setup_fee_enrollment": contract_data.get('legal_setup_fee_enrollment'),
+                    "legal_monthly_fee_enrollment": contract_data.get('legal_monthly_fee_enrollment'),
+                    "vlp_fees_validation": contract_analysis.vlp_fees_validation,
+                    "payment_date": contract_data.get('payment_date'),
+                    "plan_name": contract_data.get('plan_name'),
+                    "vlp_plan_validation": contract_analysis.vlp_plan_validation,
+                    
+                    # Payment Gateway Validation
+                    "gateway_client_signature": contract_data.get('gateway_client_signature'),
+                    "gateway_signature_validation": contract_analysis.gateway_signature_validation,
+                    "contract_payment_count": contract_data.get('contract_payment_count'),
+                    "forth_payment_count": contract_data.get('forth_payment_count'),
+                    "payment_count_validation": contract_analysis.payment_count_validation,
+                    "payment_details": contract_data.get('payment_details'),
+                    "payment_amounts_validation": contract_analysis.payment_amounts_validation,
+                    "payment_dates_validation": contract_analysis.payment_dates_validation,
+                    
+                    # SSN Validation
+                    "payment_gateway_agreement_client_ssn": contract_data.get('payment_gateway_agreement_client_ssn'),
+                    "legal_plan_agreement_client_ssn": contract_data.get('legal_plan_agreement_client_ssn'),
+                    "power_of_attorney_client_ssn": contract_data.get('power_of_attorney_client_ssn'),
+                    "credit_report_ssn": contract_data.get('credit_report_ssn'),
+                    "ssn_consistency_validation": contract_analysis.ssn_consistency_validation,
+                    
+                    # Date of Birth Validation
+                    "forth_dob": contract_data.get('forth_dob'),
+                    "contract_dob": contract_data.get('contract_dob'),
+                    "dob_consistency_validation": contract_analysis.dob_consistency_validation,
+                    "age_eligibility_validation": contract_analysis.age_eligibility_validation,
+                    
+                    # Debts Validation
+                    "forth_debt_count": contract_data.get('forth_debt_count'),
+                    "contract_debt_count": contract_data.get('contract_debt_count'),
+                    "debt_count_validation": contract_analysis.debt_count_validation,
+                    
+                    # Overall Contract Validation Result
+                    "contract_validation_result": contract_validation_result
+                }
+            
+            # Determine combined result and reason using the analyzer
+            combined_result, combined_result_reason = self.analyzer.analyze_combined_result(
+                hardship_analysis=formatted_hardship_data,
+                budget_analysis=formatted_budget_data,
+                address_analysis=formatted_address_data,
+                contract_analysis=formatted_contract_data
+            )
+            logger.info(f"Combined validation result for contact {masked_id}: {combined_result} - {combined_result_reason}")
             
             # Format combined response
             formatted_response = self._format_combined_response(
-                contact_id, hardship_data, budget_data, hardship_analysis, budget_analysis, combined_result
+                contact_id, hardship_data, budget_data, address_data, contract_data,
+                hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result
             )
             
             return {
                 "contact_id": contact_id,
-                "hardship_data": hardship_data,
-                "budget_data": budget_data,
-                "hardship_analysis": {
-                    "result": hardship_analysis.result.value if hardship_analysis else "no_data",
-                    "confidence": hardship_analysis.confidence if hardship_analysis else 0.0,
-                    "reason": hardship_analysis.reason if hardship_analysis else "No hardship data available"
-                } if hardship_analysis else None,
-                "budget_analysis": {
-                    "result": budget_analysis.result.value if budget_analysis else "no_data",
-                    "reason": budget_analysis.reason if budget_analysis else "No budget data available",
-                    "total_net_income": budget_analysis.total_net_income if budget_analysis else 0.0,
-                    "total_expenses": budget_analysis.total_expenses if budget_analysis else 0.0,
-                    "surplus": budget_analysis.surplus if budget_analysis else 0.0
-                } if budget_analysis else None,
+                "eligibility": "eligible",
+                "success": True,
                 "combined_result": combined_result,
-                "formatted_response": formatted_response
+                "combined_result_reason": combined_result_reason,
+                "message": formatted_response,
+                "eligibility_data": eligibility_data,
+                "hardship_data": formatted_hardship_data,
+                "budget_data": formatted_budget_data,
+                "address_data": formatted_address_data,
+                "contract_data": formatted_contract_data,
+                "error": None
             }
             
         except Exception as e:
-            logger.error(f"Error performing combined validation for contact {contact_id}: {e}")
+            logger.error(f"Error performing combined validation for contact {masked_id}: {e}")
             return {
                 "contact_id": contact_id,
-                "error": str(e),
-                "hardship_analysis": None,
-                "budget_analysis": None,
+                "eligibility": "not eligible",
+                "success": False,
                 "combined_result": "error",
-                "formatted_response": format_error_response(contact_id, f"Error analyzing validation data for contact {contact_id}. Please try again.", "validation")
+                "combined_result_reason": "Error occurred during validation analysis",
+                "message": format_error_response(contact_id, f"Error analyzing validation data for contact {contact_id}. Please try again.", "validation"),
+                "eligibility_data": None,
+                "hardship_data": None,
+                "budget_data": None,
+                "address_data": None,
+                "contract_data": None,
+                "error": str(e)
             }
     
-    def _determine_combined_result(self, hardship_analysis, budget_analysis) -> str:
-        """
-        Determine the combined validation result based on both hardship and budget analyses.
-        
-        Returns:
-            "pass" - Both validations pass or at least one passes with strong confidence
-            "no_pass" - Both validations fail or insufficient data
-            "mixed" - One passes, one fails (needs manual review)
-            "no_data" - No data available for either validation
-        """
-        has_hardship = hardship_analysis is not None
-        has_budget = budget_analysis is not None
-        
-        # If no data for either, return no_data
-        if not has_hardship and not has_budget:
-            return "no_data"
-        
-        # If only one type of data available, use that result
-        if has_hardship and not has_budget:
-            return hardship_analysis.result.value
-        elif has_budget and not has_hardship:
-            return budget_analysis.result.value
-        
-        # Both analyses available - determine combined result
-        hardship_result = hardship_analysis.result.value
-        budget_result = budget_analysis.result.value
-        
-        # If both pass, overall result is pass
-        if hardship_result == "pass" and budget_result == "pass":
-            return "pass"
-        
-        # If both fail, overall result is no_pass
-        if hardship_result == "no_pass" and budget_result == "no_pass":
-            return "no_pass"
-        
-        # Mixed results - one passes, one fails
-        # For mixed results, we lean toward "pass" if the hardship validation has high confidence
-        # Budget validation is deterministic (no confidence), so we only check hardship confidence
-        if hardship_result == "pass" and hardship_analysis.confidence >= 0.8:
-            return "pass"
-        else:
-            return "mixed"
+
     
     def _format_combined_response(
         self, 
         contact_id: int, 
-        hardship_data: Dict[str, Any], 
-        budget_data: Dict[str, Any],
+        hardship_data: Optional[Dict[str, Any]], 
+        budget_data: Optional[Dict[str, Any]],
+        address_data: Optional[Dict[str, Any]],
+        contract_data: Optional[Dict[str, Any]],
         hardship_analysis, 
         budget_analysis, 
+        address_analysis, 
+        contract_analysis, 
         combined_result: str
     ) -> str:
         """
-        Format combined hardship and budget analysis into a comprehensive response.
+        Format combined hardship, budget, address, and contract analysis into a comprehensive response.
         """
         return format_combined_validation_response(
-            contact_id, hardship_data, budget_data, hardship_analysis, budget_analysis, combined_result
+            contact_id, hardship_analysis, budget_analysis, address_analysis, contract_analysis, combined_result, contract_data
         )
     
     async def validate_contact_with_prefetched_data(
@@ -207,6 +441,6 @@ class CombinedValidationService:
             hardship_data: Pre-fetched hardship data
             
         Returns:
-            Dictionary containing combined hardship and budget analysis results
+            Dictionary containing combined hardship, budget, and address analysis results
         """
         return await self.perform_combined_validation(contact_id, hardship_data) 
