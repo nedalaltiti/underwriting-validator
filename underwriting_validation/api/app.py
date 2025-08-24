@@ -79,6 +79,24 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         logger.error(f"Budget field validation failed: {e}")
         raise
 
+    # Validate address field configuration
+    try:
+        address_fields = settings.address_fields
+        logger.info(f"Validating address field configuration...")
+        logger.info(f"  Address acctid: {address_fields.acctid}")
+        logger.info(f"  Address c_type: {address_fields.c_type}")
+        logger.info(f"  Address iscoapp: {address_fields.iscoapp}")
+        logger.info(f"  Address leadstatus: {address_fields.leadstatus}")
+        logger.info(f"  Address company_type: {address_fields.company_type}")
+        
+        if not address_fields.validate():
+            raise ValueError("Invalid address field configuration detected during startup")
+        
+        logger.info("✅ Address field configuration validated successfully")
+    except Exception as e:
+        logger.error(f"Address field validation failed: {e}")
+        raise
+
     # Initialize database connections first
     try:
         from underwriting_validation.db.session import init_database

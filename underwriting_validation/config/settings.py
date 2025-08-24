@@ -302,10 +302,10 @@ class HardshipFieldSettings:
     def validate(self) -> bool:
         """Validate that the field IDs are reasonable values."""
         # Check that IDs are positive integers within reasonable range
-        if not (1 <= self.financial_hardship_id <= 999999):
+        if not (1 <= self.financial_hardship_id <= 999999999999):
             logger.error(f"Invalid financial hardship ID: {self.financial_hardship_id}")
             return False
-        if not (1 <= self.hardship_description_id <= 999999):
+        if not (1 <= self.hardship_description_id <= 999999999999):
             logger.error(f"Invalid hardship description ID: {self.hardship_description_id}")
             return False
         if self.financial_hardship_id == self.hardship_description_id:
@@ -333,17 +333,56 @@ class BudgetFieldSettings:
     def validate(self) -> bool:
         """Validate that the field values are reasonable."""
         # Check that values are within reasonable ranges
-        if not (1 <= self.acctid <= 999999):
+        if not (1 <= self.acctid <= 999999999999):
             logger.error(f"Invalid budget acctid: {self.acctid}")
             return False
-        if not (1 <= self.c_type <= 999999):
+        if not (1 <= self.c_type <= 999999999999):
             logger.error(f"Invalid budget c_type: {self.c_type}")
             return False
         if not (0 <= self.iscoapp <= 1):
             logger.error(f"Invalid budget iscoapp: {self.iscoapp}")
             return False
-        if not (1 <= self.leadstatus <= 999999):
+        if not (1 <= self.leadstatus <= 999999999999):
             logger.error(f"Invalid budget leadstatus: {self.leadstatus}")
+            return False
+        return True
+
+@dataclass(frozen=True)
+class AddressFieldSettings:
+    """Address validation field configuration for database queries."""
+    acctid: int = 2996  # Default account ID for address validation
+    c_type: int = 20588  # Default contact type for underwriting stage
+    iscoapp: int = 0  # Default iscoapp value (exclude co-app)
+    leadstatus: int = 134774  # Default lead status (Submitted status)
+    company_type: int = 2  # Default company type for filtering
+    
+    @classmethod
+    def from_environment(cls) -> "AddressFieldSettings":
+        return cls(
+            acctid=get_env_var_int("ADDRESS_ACCTID", 2996),
+            c_type=get_env_var_int("ADDRESS_C_TYPE", 20588),
+            iscoapp=get_env_var_int("ADDRESS_ISCOAPP", 0),
+            leadstatus=get_env_var_int("ADDRESS_LEADSTATUS", 134774),
+            company_type=get_env_var_int("ADDRESS_COMPANY_TYPE", 2),
+        )
+    
+    def validate(self) -> bool:
+        """Validate that the field values are reasonable."""
+        # Check that values are within reasonable ranges
+        if not (1 <= self.acctid <= 999999999999):
+            logger.error(f"Invalid address acctid: {self.acctid}")
+            return False
+        if not (1 <= self.c_type <= 999999999999):
+            logger.error(f"Invalid address c_type: {self.c_type}")
+            return False
+        if not (0 <= self.iscoapp <= 1):
+            logger.error(f"Invalid address iscoapp: {self.iscoapp}")
+            return False
+        if not (1 <= self.leadstatus <= 999999999999):
+            logger.error(f"Invalid address leadstatus: {self.leadstatus}")
+            return False
+        if not (1 <= self.company_type <= 10):
+            logger.error(f"Invalid address company_type: {self.company_type}")
             return False
         return True
 
@@ -360,6 +399,7 @@ class AppSettings:
     google_cloud: GoogleCloudSettings = field(default_factory=GoogleCloudSettings.from_environment)
     hardship_fields: HardshipFieldSettings = field(default_factory=HardshipFieldSettings.from_environment)
     budget_fields: BudgetFieldSettings = field(default_factory=BudgetFieldSettings.from_environment)
+    address_fields: AddressFieldSettings = field(default_factory=AddressFieldSettings.from_environment)
 
     @classmethod
     def from_environment(cls) -> "AppSettings":
@@ -377,8 +417,14 @@ class AppSettings:
         if not budget_fields.validate():
             raise ValueError("Invalid budget field configuration")
         
+        # Create address field settings and validate them
+        address_fields = AddressFieldSettings.from_environment()
+        if not address_fields.validate():
+            raise ValueError("Invalid address field configuration")
+        
         logger.info(f"Hardship field configuration: financial_id={hardship_fields.financial_hardship_id}, description_id={hardship_fields.hardship_description_id}")
         logger.info(f"Budget field configuration: acctid={budget_fields.acctid}, c_type={budget_fields.c_type}, iscoapp={budget_fields.iscoapp}, leadstatus={budget_fields.leadstatus}")
+        logger.info(f"Address field configuration: acctid={address_fields.acctid}, c_type={address_fields.c_type}, iscoapp={address_fields.iscoapp}, leadstatus={address_fields.leadstatus}")
         
         return cls(
             db=DatabaseSettings.from_environment(),
@@ -386,6 +432,7 @@ class AppSettings:
             google_cloud=GoogleCloudSettings.from_environment(),
             hardship_fields=hardship_fields,
             budget_fields=budget_fields,
+            address_fields=address_fields,
             app_name=get_env_var("APP_NAME", cls.app_name),
             app_description=get_env_var("APP_DESCRIPTION", cls.app_description),
             host=get_env_var("HOST", cls.host),

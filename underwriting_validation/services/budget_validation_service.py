@@ -37,6 +37,7 @@ class BudgetAnalysis:
     total_net_income: float
     total_expenses: float
     surplus: float
+    surplus_indication: str  # "positive" or "negative"
 
 
 class BudgetValidationService:
@@ -70,9 +71,11 @@ class BudgetValidationService:
             # Determine if it's a positive surplus
             if surplus > 0:
                 result = BudgetValidity.PASS
+                surplus_indication = "positive"
                 reason = f"Positive surplus of ${surplus:,.2f} (Income: ${total_net_income:,.2f}, Expenses: ${total_expenses:,.2f})"
             else:
                 result = BudgetValidity.NO_PASS
+                surplus_indication = "negative"
                 reason = f"Negative surplus of ${surplus:,.2f} (Income: ${total_net_income:,.2f}, Expenses: ${total_expenses:,.2f})"
             
             analysis = BudgetAnalysis(
@@ -80,7 +83,8 @@ class BudgetValidationService:
                 reason=reason,
                 total_net_income=total_net_income,
                 total_expenses=total_expenses,
-                surplus=surplus
+                surplus=surplus,
+                surplus_indication=surplus_indication
             )
             
             masked_id = mask_contact_id(budget_data.contact_id)
