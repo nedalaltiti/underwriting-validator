@@ -191,7 +191,7 @@ class HardshipValidationService:
             reason=reason
         )
     
-    def format_hardship_response(self, analysis: HardshipAnalysis, hardship_data: Dict[str, Any]) -> str:
+    async def format_hardship_response(self, analysis: HardshipAnalysis, hardship_data: Dict[str, Any]) -> str:
         """Format the hardship analysis into a user-friendly response."""
         from underwriting_validation.utils.validation_responses import format_hardship_response
-        return format_hardship_response(analysis, hardship_data) 
+        return await format_hardship_response(analysis, hardship_data) 

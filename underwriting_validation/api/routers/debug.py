@@ -38,32 +38,46 @@ async def debug_contact_query(
     start_time = time.time()
     
     try:
-        # Check both hardship and budget validation data
+        # Check hardship, budget, address, and credit score validation data
         hardship_result = await contact_service.analyze_contact_hardship(req.contact_id)
         budget_result = await contact_service.get_contact_budget_analysis(req.contact_id)
+        address_result = await contact_service.analyze_contact_address(req.contact_id)
+        credit_score_result = await contact_service.analyze_contact_credit_score(req.contact_id)
         
         # Combine responses
         response_parts = []
         
         if hardship_result:
-            hardship_response = contact_service.format_contact_response(hardship_result)
+            hardship_response = await contact_service.format_contact_response(hardship_result)
             response_parts.append("**HARDSHIP ANALYSIS:**")
             response_parts.append(hardship_response)
         
         if budget_result:
-            budget_response = contact_service.format_budget_response(budget_result)
+            budget_response = await contact_service.format_budget_response(budget_result)
             response_parts.append("**BUDGET ANALYSIS:**")
             response_parts.append(budget_response)
         
-        if not hardship_result and not budget_result:
-            response_parts.append("No hardship or budget data found for this contact.")
+        if address_result:
+            address_response = await contact_service.format_address_response(address_result)
+            response_parts.append("**ADDRESS ANALYSIS:**")
+            response_parts.append(address_response)
+        
+        if credit_score_result:
+            credit_score_response = await contact_service.format_credit_score_response(credit_score_result)
+            response_parts.append("**CREDIT SCORE ANALYSIS:**")
+            response_parts.append(credit_score_response)
+        
+        if not hardship_result and not budget_result and not address_result and not credit_score_result:
+            response_parts.append("No hardship, budget, address, or credit score data found for this contact.")
         
         combined_response = "\n\n".join(response_parts)
         
         # Combine the data for the response
         combined_data = {
             "hardship": hardship_result,
-            "budget": budget_result
+            "budget": budget_result,
+            "address": address_result,
+            "credit_score": credit_score_result
         }
         
         processing_time = time.time() - start_time
@@ -72,7 +86,7 @@ async def debug_contact_query(
             contact_id=req.contact_id,
             contact_info=combined_data,
             response=combined_response,
-            success=hardship_result is not None or budget_result is not None,
+            success=hardship_result is not None or budget_result is not None or address_result is not None or credit_score_result is not None,
             processing_time=round(processing_time, 2)
         )
         

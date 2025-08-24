@@ -1,0 +1,313 @@
+"""
+Combined Result Analyzer for Underwriting Validation
+
+This module provides logic to analyze combined validation results from hardship,
+budget, and address validations and determine the overall result with detailed reasoning.
+"""
+
+from typing import Optional, Dict, Any
+from dataclasses import dataclass
+
+
+@dataclass
+class ValidationResult:
+    """Represents a single validation result."""
+    type: str  # 'hardship', 'budget', 'address'
+    result: str  # 'pass', 'no_pass', 'mixed', 'no_data'
+    confidence: Optional[float] = None
+    reason: Optional[str] = None
+
+
+class CombinedResultAnalyzer:
+    """Analyzes combined validation results and provides detailed reasoning."""
+    
+    def __init__(self):
+        """Initialize the combined result analyzer."""
+        pass
+    
+    def analyze_combined_result(
+        self,
+        hardship_analysis: Optional[Dict[str, Any]] = None,
+        budget_analysis: Optional[Dict[str, Any]] = None,
+        address_analysis: Optional[Dict[str, Any]] = None,
+        contract_analysis: Optional[Dict[str, Any]] = None,
+        duplication_analysis: Optional[Dict[str, Any]] = None,
+        draft_analysis: Optional[Dict[str, Any]] = None,
+        credit_score_analysis: Optional[Dict[str, Any]] = None
+    ) -> tuple[str, str]:
+        """
+        Analyze combined validation results and determine overall result with reasoning.
+        
+        Args:
+            hardship_analysis: Hardship validation analysis data
+            budget_analysis: Budget validation analysis data
+            address_analysis: Address validation analysis data
+            contract_analysis: Contract validation analysis data
+            
+        Returns:
+            Tuple of (combined_result, combined_result_reason)
+        """
+        # Convert to ValidationResult objects
+        hardship_result = self._extract_validation_result('hardship', hardship_analysis)
+        budget_result = self._extract_validation_result('budget', budget_analysis)
+        address_result = self._extract_validation_result('address', address_analysis)
+        contract_result = self._extract_validation_result('contract', contract_analysis)
+        duplication_result = self._extract_validation_result('duplication', duplication_analysis)
+        draft_result = self._extract_validation_result('draft', draft_analysis)
+        credit_score_result = self._extract_validation_result('credit_score', credit_score_analysis)
+        
+        # Get available validations
+        available_validations = [r for r in [hardship_result, budget_result, address_result, contract_result, duplication_result, draft_result, credit_score_result] if r is not None]
+        
+        # If no data for any validation
+        if not available_validations:
+            return "no_data", "No validation data available for any category (hardship, budget, address, contract, duplication, draft, or credit score)"
+        
+        # Check if any validation returned "not_eligible"
+        not_eligible_validations = [v for v in available_validations if v.result == "not_eligible"]
+        if not_eligible_validations:
+            return "not_eligible", "Contact is not eligible for validation process"
+        
+        # If only one validation available
+        if len(available_validations) == 1:
+            validation = available_validations[0]
+            if validation.result == "pass":
+                return "pass", f"Only {validation.type} validation available and it passed"
+            elif validation.result == "no_pass":
+                return "no_pass", f"Only {validation.type} validation available and it failed"
+            elif validation.result == "mixed":
+                return "mixed", f"Only {validation.type} validation available with mixed results"
+            else:
+                return "no_data", f"Only {validation.type} validation available but no data"
+        
+        # Multiple validations available - analyze combinations
+        return self._analyze_multiple_validations(available_validations)
+    
+    def _extract_validation_result(self, validation_type: str, analysis_data: Optional[Dict[str, Any]]) -> Optional[ValidationResult]:
+        """Extract validation result from analysis data."""
+        if not analysis_data:
+            return ValidationResult(
+                type=validation_type,
+                result="no_data",
+                reason=f"No {validation_type} data available"
+            )
+        
+        if validation_type == "hardship":
+            result = analysis_data.get('hardship_validation_result', 'no_data')
+            confidence = analysis_data.get('hardship_validation_analysis')
+            if result == "no_data":
+                return ValidationResult(
+                    type="hardship",
+                    result="no_data",
+                    reason="No hardship data available"
+                )
+            return ValidationResult(
+                type="hardship",
+                result=result,
+                confidence=confidence,
+                reason=confidence
+            )
+        elif validation_type == "budget":
+            result = analysis_data.get('budget_outcome', 'no_data')
+            difference = analysis_data.get('budget_difference', 0)
+            surplus_indication = analysis_data.get('surplus_indication', 'unknown')
+            if result == "no_data":
+                return ValidationResult(
+                    type="budget",
+                    result="no_data",
+                    reason="No budget data available"
+                )
+            return ValidationResult(
+                type="budget",
+                result=result,
+                reason=f"Budget {surplus_indication} surplus: ${difference:,.2f}" if difference else "No budget data"
+            )
+        elif validation_type == "address":
+            result = analysis_data.get('address_validation_result', 'no_data')
+            state_check = analysis_data.get('state_check', 'Unknown')
+            assigned_company = analysis_data.get('assigned_company', 'Unknown')
+            if result == "no_data":
+                return ValidationResult(
+                    type="address",
+                    result="no_data",
+                    reason="No address data available"
+                )
+            return ValidationResult(
+                type="address",
+                result=result,
+                reason=f"State: {state_check}, Company: {assigned_company}"
+            )
+        elif validation_type == "contract":
+            result = analysis_data.get('contract_validation_result', 'no_data')
+            ip_address_validation = analysis_data.get('ip_address_validation', 'Unknown')
+            email_address_validation = analysis_data.get('email_address_validation', 'Unknown')
+            signature_validation = analysis_data.get('signature_validation', 'Unknown')
+            bank_account_validation = analysis_data.get('bank_account_validation', 'Unknown')
+            vlp_name_validation = analysis_data.get('vlp_name_validation', 'Unknown')
+            ssn_consistency_validation = analysis_data.get('ssn_consistency_validation', 'Unknown')
+            dob_consistency_validation = analysis_data.get('dob_consistency_validation', 'Unknown')
+            vlp_fees_validation = analysis_data.get('vlp_fees_validation', 'Unknown')
+            vlp_plan_validation = analysis_data.get('vlp_plan_validation', 'Unknown')
+            gateway_signature_validation = analysis_data.get('gateway_signature_validation', 'Unknown')
+            payment_count_validation = analysis_data.get('payment_count_validation', 'Unknown')
+            payment_amounts_validation = analysis_data.get('payment_amounts_validation', 'Unknown')
+            payment_dates_validation = analysis_data.get('payment_dates_validation', 'Unknown')
+            if result == "no_data":
+                return ValidationResult(
+                    type="contract",
+                    result="no_data",
+                    reason="No contract data available"
+                )
+            return ValidationResult(
+                type="contract",
+                result=result,
+                reason=f"IP: {ip_address_validation}, Email: {email_address_validation}, Signature: {signature_validation}, Bank: {bank_account_validation}, VLP Name: {vlp_name_validation}, SSN: {ssn_consistency_validation}, DOB: {dob_consistency_validation}, VLP Fees: {vlp_fees_validation}, VLP Plan: {vlp_plan_validation}, Gateway Sig: {gateway_signature_validation}, Payment Count: {payment_count_validation}, Payment Amounts: {payment_amounts_validation}, Payment Dates: {payment_dates_validation}"
+            )
+        elif validation_type == "duplication":
+            result = analysis_data.get('duplication_validation_result', 'no_data')
+            has_duplicates = analysis_data.get('has_duplicates', False)
+            ssn_duplicate_count = analysis_data.get('ssn_duplicate_count', 0)
+            phone_duplicate_count = analysis_data.get('phone_duplicate_count', 0)
+            if result == "no_data":
+                return ValidationResult(
+                    type="duplication",
+                    result="no_data",
+                    reason="No duplication data available"
+                )
+            return ValidationResult(
+                type="duplication",
+                result=result,
+                reason=f"Duplicates found: {has_duplicates}, SSN duplicates: {ssn_duplicate_count}, Phone duplicates: {phone_duplicate_count}"
+            )
+        elif validation_type == "draft":
+            result = analysis_data.get('draft_validation_result', 'no_data')
+            months_over_250 = analysis_data.get('months_over_250', 0)
+            months_under_250 = analysis_data.get('months_under_250', 0)
+            months_with_data = analysis_data.get('months_with_data', 0)
+            average_monthly_payment = analysis_data.get('average_monthly_payment', 0)
+            if result == "no_data":
+                return ValidationResult(
+                    type="draft",
+                    result="no_data",
+                    reason="No draft data available"
+                )
+            return ValidationResult(
+                type="draft",
+                result=result,
+                reason=f"Payment validation: {months_over_250}/{months_with_data} months meet $250 minimum (Avg: ${average_monthly_payment:,.2f})"
+            )
+        elif validation_type == "credit_score":
+            result = analysis_data.get('credit_score_validation_result', 'no_data')
+            credit_score = analysis_data.get('credit_score', 0)
+            credit_score_status = analysis_data.get('credit_score_status', 'unknown')
+            if result == "no_data":
+                return ValidationResult(
+                    type="credit_score",
+                    result="no_data",
+                    reason="No credit score data available"
+                )
+            return ValidationResult(
+                type="credit_score",
+                result=result,
+                reason=f"Credit score: {credit_score} ({credit_score_status})"
+            )
+        
+        return None
+    
+    def _analyze_multiple_validations(self, validations: list[ValidationResult]) -> tuple[str, str]:
+        """Analyze multiple validation results and determine combined outcome."""
+        # Count results
+        pass_count = sum(1 for v in validations if v.result == "pass")
+        no_pass_count = sum(1 for v in validations if v.result == "no_pass")
+        mixed_count = sum(1 for v in validations if v.result == "mixed")
+        no_data_count = sum(1 for v in validations if v.result == "no_data")
+        total_count = len(validations)
+        
+        # Determine combined result and reason
+        if pass_count == total_count:
+            # All validations pass
+            validation_types = [v.type for v in validations]
+            return "pass", f"All validations passed: {', '.join(validation_types)}"
+        
+        elif no_pass_count == total_count:
+            # All validations fail
+            validation_types = [v.type for v in validations]
+            return "no_pass", f"All validations failed: {', '.join(validation_types)}"
+        
+        elif pass_count > no_pass_count and pass_count >= 2:
+            # Majority pass (at least 2 out of 3)
+            passing_types = [v.type for v in validations if v.result == "pass"]
+            failing_types = [v.type for v in validations if v.result == "no_pass"]
+            no_data_types = [v.type for v in validations if v.result == "no_data"]
+            
+            reason_parts = [f"Majority passed ({', '.join(passing_types)})"]
+            if failing_types:
+                reason_parts.append(f"Failed: {', '.join(failing_types)}")
+            if no_data_types:
+                reason_parts.append(f"No data: {', '.join(no_data_types)}")
+            
+            return "pass", f"{'; '.join(reason_parts)}"
+        
+        elif no_pass_count > pass_count and no_pass_count >= 2:
+            # Majority fail (at least 2 out of 3)
+            failing_types = [v.type for v in validations if v.result == "no_pass"]
+            passing_types = [v.type for v in validations if v.result == "pass"]
+            no_data_types = [v.type for v in validations if v.result == "no_data"]
+            
+            reason_parts = [f"Majority failed ({', '.join(failing_types)})"]
+            if passing_types:
+                reason_parts.append(f"Passed: {', '.join(passing_types)}")
+            if no_data_types:
+                reason_parts.append(f"No data: {', '.join(no_data_types)}")
+            
+            return "no_pass", f"{'; '.join(reason_parts)}"
+        
+        elif mixed_count > 0:
+            # Mixed results present
+            mixed_types = [v.type for v in validations if v.result == "mixed"]
+            pass_types = [v.type for v in validations if v.result == "pass"]
+            fail_types = [v.type for v in validations if v.result == "no_pass"]
+            no_data_types = [v.type for v in validations if v.result == "no_data"]
+            
+            reason_parts = []
+            if pass_types:
+                reason_parts.append(f"Passed: {', '.join(pass_types)}")
+            if fail_types:
+                reason_parts.append(f"Failed: {', '.join(fail_types)}")
+            if mixed_types:
+                reason_parts.append(f"Mixed: {', '.join(mixed_types)}")
+            if no_data_types:
+                reason_parts.append(f"No data: {', '.join(no_data_types)}")
+            
+            return "mixed", f"Mixed validation results - {'; '.join(reason_parts)}"
+        
+        elif no_data_count > 0:
+            # Some validations have no data
+            no_data_types = [v.type for v in validations if v.result == "no_data"]
+            pass_types = [v.type for v in validations if v.result == "pass"]
+            fail_types = [v.type for v in validations if v.result == "no_pass"]
+            
+            reason_parts = []
+            if pass_types:
+                reason_parts.append(f"Passed: {', '.join(pass_types)}")
+            if fail_types:
+                reason_parts.append(f"Failed: {', '.join(fail_types)}")
+            if no_data_types:
+                reason_parts.append(f"No data: {', '.join(no_data_types)}")
+            
+            if not pass_types and not fail_types:
+                return "no_data", f"No data available for any validation: {', '.join(no_data_types)}"
+            else:
+                return "mixed", f"Limited data available - {'; '.join(reason_parts)}"
+        
+        else:
+            # Edge case - equal pass/fail counts
+            pass_types = [v.type for v in validations if v.result == "pass"]
+            fail_types = [v.type for v in validations if v.result == "no_pass"]
+            no_data_types = [v.type for v in validations if v.result == "no_data"]
+            
+            reason_parts = [f"Equal pass/fail results - Passed: {', '.join(pass_types)}; Failed: {', '.join(fail_types)}"]
+            if no_data_types:
+                reason_parts.append(f"No data: {', '.join(no_data_types)}")
+            
+            return "mixed", f"{'; '.join(reason_parts)}"

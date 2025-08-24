@@ -1,136 +1,120 @@
 # Underwriting Validation API
 
-A pure API service for contact validation, providing hardship and budget analysis capabilities.
-
-## Overview
-
-Underwriting Validation API is a FastAPI-based service that provides contact validation functionality without any Teams or feedback-related components. It focuses purely on:
-
-- Contact hardship validation
-- Budget analysis
-- Combined validation (hardship + budget)
-- Database integration for contact data
+A FastAPI service for contact validation with hardship, budget, and address analysis.
 
 ## Features
 
-- **Contact Validation**: Validate contacts for hardship and budget information
-- **Combined Analysis**: Perform comprehensive validation combining both hardship and budget analysis
-- **Database Integration**: PostgreSQL database integration for contact data
-- **Gemini AI**: Google Gemini integration for AI-powered analysis
-- **Health Monitoring**: Comprehensive health and diagnostic endpoints
+- **Eligibility Check**: Verify if contacts meet validation criteria
+- **Combined Validation**: Hardship + budget + address analysis
+- **AI-Powered Analysis**: Gemini integration for hardship validation
+- **Database Integration**: PostgreSQL for contact data
 
 ## API Endpoints
 
-### Validation Endpoints
-
-- `POST /api/validation/contact` - Validate a contact for hardship and/or budget information
-- `POST /api/validation/combined` - Perform combined hardship and budget validation
-- `GET /api/validation/contact/{contact_id}` - Get basic contact information without validating
-
-### Health Endpoints
-
-- `GET /health` - Basic health check
-- `GET /health/database` - Database-specific health check
-- `GET /health/diagnostic` - Detailed diagnostic information
-
-### Debug Endpoints
-
-- `POST /api/debug/contact` - Debug contact validation
-
-### Admin Endpoints
-
-- `GET /api/admin/status` - Admin status information
+- `POST /api/validation/combined` - **Main endpoint**: Combined validation with eligibility check
+- `POST /api/validation/contact` - Individual validation
+- `GET /api/validation/contact/{contact_id}` - Contact info
+- `GET /health` - Health check
 
 ## Configuration
 
-The service uses environment variables for configuration:
+Required environment variables:
+- `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST` - Database connection
+- `GOOGLE_API_KEY` - Gemini AI access
+- `HARDSHIP_FINANCIAL_ID`, `HARDSHIP_DESCRIPTION_ID` - Hardship field IDs
+- `BUDGET_ACCTID`, `BUDGET_C_TYPE`, `BUDGET_ISCOAPP`, `BUDGET_LEADSTATUS` - Budget validation
+- `ADDRESS_ACCTID`, `ADDRESS_C_TYPE`, `ADDRESS_ISCOAPP`, `ADDRESS_LEADSTATUS` - Address validation
 
-### Database Configuration
-- `DB_NAME` - Database name
-- `DB_USER` - Database username
-- `DB_PASSWORD` - Database password
-- `DB_HOST` - Database host
-- `DB_PORT` - Database port (default: 5432)
+## Eligibility Check
 
-### Gemini Configuration
-- `GOOGLE_API_KEY` - Google API key for Gemini
-- `GEMINI_MODEL_NAME` - Gemini model name (default: gemini-2.0-flash-001)
-- `GEMINI_TEMPERATURE` - Gemini temperature setting (default: 0.0)
+Verifies if contacts meet validation criteria:
+- Account ID ≠ 5783
+- Category = "Underwriting" 
+- Not deleted (`del = 'f'`)
+- Not co-applicant (`iscoapp = 0`)
+- Lead status = "Submitted"
 
-### Application Configuration
-- `APP_NAME` - Application name (default: "Underwriting Validation API")
-- `HOST` - Host to bind to (default: 0.0.0.0)
-- `PORT` - Port to bind to (default: 3978)
-- `DEBUG` - Enable debug mode (default: false)
+## Address Validation
 
-### Field Configuration
-- `HARDSHIP_FINANCIAL_ID` - Financial hardship field ID
-- `HARDSHIP_DESCRIPTION_ID` - Hardship description field ID
-- `BUDGET_ACCTID` - Budget account ID field
-- `BUDGET_C_TYPE` - Budget contact type field
-- `BUDGET_ISCOAPP` - Budget iscoapp field
-- `BUDGET_LEADSTATUS` - Budget lead status field
+Checks state/company matching:
+- **Clarity**: AL, AK, AZ, AR, CA, CO, DC, FL, ID, IN, KY, MD, MA, MI, MN, MS, MO, MT, NE, NM, NY, NC, OH, OK, SD, TN, TX, UT
+- **Concordia**: GA, IL, IA, LA, NV, NJ, PA, PR, VA, WI, WY
 
-## Running the Service
+## Running
 
-### Prerequisites
-
-Install dependencies using Poetry:
 ```bash
-# Install Poetry (if not already installed)
-curl -sSL https://install.python-poetry.org | python3 -
-
-# Install project dependencies
+# Development
 poetry install
-```
-
-### Development
-```bash
-# Using Poetry
 poetry run python -m underwriting_validation.api
 
-# Or activate the virtual environment first
-poetry shell
-python -m underwriting_validation.api
-
-# Or use the Poetry script
-poetry run underwriting-api
+# Production
+docker-compose up -d
 ```
 
-### Production
-```bash
-# Using Poetry
-poetry run uvicorn underwriting_validation.api.app:app --host 0.0.0.0 --port 3978
+## Validation Results
 
-# Or traditional uvicorn (after poetry install)
-uvicorn underwriting_validation.api.app:app --host 0.0.0.0 --port 3978
+**Result Types**: `pass`, `no_pass`, `mixed`, `no_data`, `not_eligible`, `error`
+
+**Hardship**: AI analysis with confidence score (0.0-1.0)
+**Budget**: Income vs expenses with surplus indication
+**Address**: State/company matching validation
+
+### Example Response
+
+```json
+{
+  "contact_id": 12345,
+  "eligibility": "eligible",
+  "success": true,
+  "combined_result": "pass",
+  "eligibility_data": { "contact_category": "Underwriting", "contact_lead_status": "Submitted" },
+  "hardship_data": { "hardship_confidence": 0.85, "hardship_validation_result": "pass" },
+  "budget_data": { "surplus_indication": "positive", "budget_outcome": "pass" },
+  "address_data": { "address_validation_result": "pass" }
+}
 ```
 
-### Docker (Recommended)
-```bash
-# Development with Docker Compose
-docker-compose up --build
-
-# Production deployment
-docker-compose -f docker-compose.prod.yml up --build
+#### **Mixed Results**
+```json
+{
+  "contact_id": 12346,
+  "success": true,
+  "combined_result": "mixed",
+  "combined_result_reason": "Mixed validation results - Passed: hardship; Failed: budget; No data: address",
+  "message": "Mixed validation results...",
+  "hardship_data": {...},
+  "budget_data": {...},
+  "address_data": null,
+  "error": null
+}
 ```
 
-## API Documentation
+#### **No Data Available**
+```json
+{
+  "contact_id": 12347,
+  "success": false,
+  "combined_result": "no_data",
+  "combined_result_reason": "No validation data available for any category (hardship, budget, or address)",
+  "message": "No data found for this contact",
+  "hardship_data": null,
+  "budget_data": null,
+  "address_data": null,
+  "error": "No contact data available"
+}
+```
 
-Once the service is running, you can access the interactive API documentation at:
-- Swagger UI: `http://localhost:3978/docs`
-- ReDoc: `http://localhost:3978/redoc`
+## API Usage Examples
 
-## Example Usage
-
-### Validate a Contact
+### Validate Contact
 ```bash
 curl -X POST "http://localhost:3978/api/validation/contact" \
   -H "Content-Type: application/json" \
   -d '{
     "contact_id": 12345,
+    "include_hardship": true,
     "include_budget": true,
-    "include_hardship": true
+    "include_address": true
   }'
 ```
 
@@ -143,23 +127,20 @@ curl -X POST "http://localhost:3978/api/validation/combined" \
   }'
 ```
 
-## Architecture
+### Get Contact Info
+```bash
+curl "http://localhost:3978/api/validation/contact/12345"
+```
 
-The service follows a clean architecture pattern:
+## Health Checks
 
-- **API Layer**: FastAPI routers and endpoints
-- **Service Layer**: Business logic for validation
-- **Repository Layer**: Data access and database operations
-- **Infrastructure Layer**: External service integrations (Gemini)
+```bash
+# Basic health check
+curl "http://localhost:3978/health"
 
-## Dependencies
+# Database health check
+curl "http://localhost:3978/health/database"
 
-- FastAPI - Web framework
-- SQLAlchemy - Database ORM
-- asyncpg - PostgreSQL async driver
-- Google Generative AI - Gemini integration
-- Pydantic - Data validation
-
-## License
-
-This project is proprietary and confidential. 
+# Diagnostic information
+curl "http://localhost:3978/health/diagnostic"
+``` 

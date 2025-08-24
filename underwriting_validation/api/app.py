@@ -66,10 +66,11 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     try:
         budget_fields = settings.budget_fields
         logger.info(f"Validating budget field configuration...")
-        logger.info(f"  Budget acctid: {budget_fields.acctid}")
-        logger.info(f"  Budget c_type: {budget_fields.c_type}")
-        logger.info(f"  Budget iscoapp: {budget_fields.iscoapp}")
-        logger.info(f"  Budget leadstatus: {budget_fields.leadstatus}")
+        logger.info(f"  Budget uses base query settings")
+        logger.info(f"  Base query acctid: {settings.base_query.acctid}")
+        logger.info(f"  Base query c_type: {settings.base_query.c_type}")
+        logger.info(f"  Base query iscoapp: {settings.base_query.iscoapp}")
+        logger.info(f"  Base query leadstatus: {settings.base_query.leadstatus}")
         
         if not budget_fields.validate():
             raise ValueError("Invalid budget field configuration detected during startup")
@@ -77,6 +78,25 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("✅ Budget field configuration validated successfully")
     except Exception as e:
         logger.error(f"Budget field validation failed: {e}")
+        raise
+
+    # Validate address field configuration
+    try:
+        address_fields = settings.address_fields
+        logger.info(f"Validating address field configuration...")
+        logger.info(f"  Address uses base query settings")
+        logger.info(f"  Base query acctid: {settings.base_query.acctid}")
+        logger.info(f"  Base query c_type: {settings.base_query.c_type}")
+        logger.info(f"  Base query iscoapp: {settings.base_query.iscoapp}")
+        logger.info(f"  Base query leadstatus: {settings.base_query.leadstatus}")
+        logger.info(f"  Address company_type: {address_fields.company_type}")
+        
+        if not address_fields.validate():
+            raise ValueError("Invalid address field configuration detected during startup")
+        
+        logger.info("✅ Address field configuration validated successfully")
+    except Exception as e:
+        logger.error(f"Address field validation failed: {e}")
         raise
 
     # Initialize database connections first
