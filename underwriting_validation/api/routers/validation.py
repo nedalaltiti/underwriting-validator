@@ -24,6 +24,7 @@ class ContactValidationRequest(BaseModel):
     contact_id: int = Field(ge=1, le=10**11, description="Contact ID to validate (must be a positive integer, supports up to 11 digits)")
     include_budget: bool = Field(default=True, description="Include budget validation")
     include_hardship: bool = Field(default=True, description="Include hardship validation")
+    include_address: bool = Field(default=True, description="Include address validation")
 
 class ContactValidationResponse(BaseModel):
     """Response model for contact validation."""
@@ -41,11 +42,17 @@ class CombinedValidationRequest(BaseModel):
 class CombinedValidationResponse(BaseModel):
     """Response model for combined validation."""
     contact_id: int
+    eligibility: str
     success: bool
+    combined_result: str
+    combined_result_reason: Optional[str] = None
     message: str
+    eligibility_data: Optional[Dict[str, Any]] = None
     hardship_data: Optional[Dict[str, Any]] = None
     budget_data: Optional[Dict[str, Any]] = None
-    combined_result: Optional[str] = None
+    address_data: Optional[Dict[str, Any]] = None
+    contract_data: Optional[Dict[str, Any]] = None
+    duplication_data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
 @router.post("/contact", 
@@ -58,9 +65,9 @@ async def validate_contact(
     contact_service: ContactService = Depends(get_contact_validation_uc)
 ):
     """
-    Validate a contact for hardship and/or budget information.
+    Validate a contact for hardship, budget, and/or address information.
     
-    This endpoint provides a robust validation of a contact's hardship and budget data.
+    This endpoint provides a robust validation of a contact's hardship, budget, and address data.
     """
     try:
         masked_id = mask_contact_id(req.contact_id)
@@ -72,6 +79,7 @@ async def validate_contact(
         # Get contact data based on requested validation types
         hardship_data = None
         budget_data = None
+        address_data = None
         
         if req.include_hardship:
             hardship_data = await contact_service.analyze_contact_hardship(req.contact_id)
@@ -79,8 +87,11 @@ async def validate_contact(
         if req.include_budget:
             budget_data = await contact_service.get_contact_budget_analysis(req.contact_id)
         
+        if req.include_address:
+            address_data = await contact_service.analyze_contact_address(req.contact_id)
+        
         # Combine the data
-        contact_data = hardship_data or budget_data
+        contact_data = hardship_data or budget_data or address_data
         
         if not contact_data:
             return ContactValidationResponse(
@@ -93,25 +104,26 @@ async def validate_contact(
             )
         
         # Format the response based on what data we have
-        if hardship_data and budget_data:
-            # Both hardship and budget data available
-            formatted_response = f"{contact_service.format_contact_response(hardship_data)}\n\n{contact_service.format_budget_response(budget_data)}"
-            combined_data = {
-                "hardship": hardship_data,
-                "budget": budget_data
-            }
-        elif hardship_data:
-            # Only hardship data
-            formatted_response = contact_service.format_contact_response(hardship_data)
-            combined_data = hardship_data
-        elif budget_data:
-            # Only budget data
-            formatted_response = contact_service.format_budget_response(budget_data)
-            combined_data = budget_data
-        else:
-            # No data
+        response_parts = []
+        combined_data = {}
+        
+        if hardship_data:
+            response_parts.append(contact_service.format_contact_response(hardship_data))
+            combined_data["hardship"] = hardship_data
+        
+        if budget_data:
+            response_parts.append(contact_service.format_budget_response(budget_data))
+            combined_data["budget"] = budget_data
+        
+        if address_data:
+            response_parts.append(contact_service.format_address_response(address_data))
+            combined_data["address"] = address_data
+        
+        if not response_parts:
             formatted_response = "No validation data available for this contact"
             combined_data = None
+        else:
+            formatted_response = "\n\n".join(response_parts)
         
         return ContactValidationResponse(
             contact_id=req.contact_id,
@@ -144,11 +156,11 @@ async def validate_contact_combined(
     combined_service: CombinedValidationService = Depends(get_combined_validation_uc)
 ):
     """
-    Perform combined hardship and budget validation for a contact.
+    Perform combined hardship, budget, and address validation for a contact.
     
-    This endpoint provides comprehensive validation combining both hardship
-    and budget analysis in a single request.
-    """
+    This endpoint provides comprehensive validation combining hardship,
+    budget, and address analysis in a single request.
+        """
     try:
         masked_id = mask_contact_id(req.contact_id)
         logger.info(f"Performing combined validation for contact {masked_id}")
@@ -156,38 +168,66 @@ async def validate_contact_combined(
         # Perform combined validation
         result = await combined_service.perform_combined_validation(req.contact_id)
         
+        if result:
+            logger.info(f"Combined validation completed for contact {masked_id}: eligibility={result.get('eligibility')}, result={result.get('combined_result')}")
+        else:
+            logger.warning(f"No validation result returned for contact {masked_id}")
+        
         if not result:
-            return CombinedValidationResponse(
-                contact_id=req.contact_id,
-                success=False,
-                message="No data found for this contact",
-                hardship_data=None,
-                budget_data=None,
-                combined_result=None,
-                error="No contact data available"
-            )
+                    return CombinedValidationResponse(
+            contact_id=req.contact_id,
+            eligibility="not eligible",
+            success=False,
+            combined_result="no_data",
+            combined_result_reason="No validation data available for any category",
+            message="No data found for this contact",
+            eligibility_data=None,
+            hardship_data=None,
+            budget_data=None,
+            address_data=None,
+            contract_data=None,
+            duplication_data=None,
+            error="No contact data available"
+        )
         
         return CombinedValidationResponse(
             contact_id=req.contact_id,
-            success=True,
-            message=result.get("formatted_response", "Validation completed"),
+            eligibility=result.get("eligibility", "not eligible"),
+            success=result.get("success", False),
+            combined_result=result.get("combined_result", "error"),
+            combined_result_reason=result.get("combined_result_reason"),
+            message=result.get("message", "Validation completed"),
+            eligibility_data=result.get("eligibility_data"),
             hardship_data=result.get("hardship_data"),
             budget_data=result.get("budget_data"),
-            combined_result=result.get("combined_result")
+            address_data=result.get("address_data"),
+            contract_data=result.get("contract_data"),
+            duplication_data=result.get("duplication_data"),
+            error=result.get("error")
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         masked_id = mask_contact_id(req.contact_id)
         logger.error(f"Error performing combined validation for contact {masked_id}: {e}")
         return CombinedValidationResponse(
             contact_id=req.contact_id,
+            eligibility="not eligible",
             success=False,
+            combined_result="error",
+            combined_result_reason="Error occurred during validation analysis",
             message="An error occurred during combined validation",
+            eligibility_data=None,
             hardship_data=None,
             budget_data=None,
-            combined_result=None,
+            address_data=None,
+            contract_data=None,
+            duplication_data=None,
             error=str(e)
         )
+
+
 
 @router.get("/contact/{contact_id}")
 async def get_contact_info(
@@ -195,9 +235,9 @@ async def get_contact_info(
     contact_service: ContactService = Depends(get_contact_validation_uc)
 ):
     """
-    Get basic contact information with hardship and budget data availability.
+    Get basic contact information with hardship, budget, and address data availability.
     
-    This endpoint provides basic contact lookup to check if hardship and budget
+    This endpoint provides basic contact lookup to check if hardship, budget, and address
     data are available for a contact, without performing validation analysis.
     """
     try:
@@ -213,7 +253,10 @@ async def get_contact_info(
         # Get raw budget data (without analysis)
         budget_data = await contact_service.get_contact_with_budget_data(contact_id)
         
-        if not hardship_data and not budget_data:
+        # Get raw address data (without analysis)
+        address_data = await contact_service.get_contact_with_address_data(contact_id)
+        
+        if not hardship_data and not budget_data and not address_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Contact {contact_id} not found"
@@ -230,15 +273,22 @@ async def get_contact_info(
             budget_data.get('total_expenses', 0) > 0
         ])
         
+        has_address_data = address_data and any([
+            address_data.get('state'),
+            address_data.get('assigned_company')
+        ])
+        
         return {
             "contact_id": contact_id,
             "success": True,
             "data_available": {
                 "hardship": has_hardship_data,
-                "budget": has_budget_data
+                "budget": has_budget_data,
+                "address": has_address_data
             },
             "hardship_data": hardship_data if has_hardship_data else None,
-            "budget_data": budget_data if has_budget_data else None
+            "budget_data": budget_data if has_budget_data else None,
+            "address_data": address_data if has_address_data else None
         }
         
     except HTTPException:
@@ -249,4 +299,4 @@ async def get_contact_info(
         raise HTTPException(
             status_code=500,
             detail=f"An error occurred while retrieving contact information: {str(e)}"
-        ) 
+        )
