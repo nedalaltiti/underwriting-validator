@@ -9,15 +9,17 @@ from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, bindparam, and_, or_, null
 from underwriting_validation.db.models import Contact, ContactFile
-from underwriting_validation.utils.pii_filter import mask_contact_id
+from underwriting_validation.infrastructure.base.repository_base import ContractRepositoryBase
 
-logger = logging.getLogger(__name__)
-
-class ContractIPRepository:
+class ContractIPRepository(ContractRepositoryBase):
     """Repository for contract IP address validation database operations."""
     
     def __init__(self, session: AsyncSession):
-        self.session = session
+        super().__init__(session, "ContractIPRepository")
+    
+    def get_repository_type(self) -> str:
+        """Return the repository type name."""
+        return "contract_ip"
     
     async def fetch_contract_ip_data(self, contact_id: int) -> Optional[Dict[str, Any]]:
         """Fetch IP address data for contract validation."""
@@ -34,26 +36,21 @@ class ContractIPRepository:
             .outerjoin(ContactFile, ContactFile.contact_id == Contact.id)
             .outerjoin(ClixsignCertificateSender, ClixsignCertificateSender.file_id == ContactFile.id)
             .outerjoin(ClixsignCertificateSigner, ClixsignCertificateSigner.file_id == ContactFile.id)
-            .where(
-                and_(
-                    Contact.id == bindparam('contact_id'),
-                    # Soft-delete filter
-                    or_(
-                        Contact.del_.is_(null()),
-                        Contact.del_ != True
-                    )
-                )
-            )
+            .where(self.create_base_contact_filter(contact_id))
         )
         
-        result = await self.session.execute(stmt, {"contact_id": contact_id})
-        row = result.fetchone()
+        # Use base class method for standardized execution
+        result_data = await self.execute_single_result_query(
+            stmt, 
+            contact_id, 
+            "contract IP data fetch"
+        )
         
-        if row and (row.sender_ip_address or row.signer_ip_address):
+        if result_data and (result_data.get('sender_ip_address') or result_data.get('signer_ip_address')):
             return {
-                "contact_id": row.id,
-                "acctid": row.acctid,
-                "sender_ip_address": row.sender_ip_address,
-                "signer_ip_address": row.signer_ip_address
+                "contact_id": result_data['id'],
+                "acctid": result_data['acctid'],
+                "sender_ip_address": result_data['sender_ip_address'],
+                "signer_ip_address": result_data['signer_ip_address']
             }
         return None

@@ -11,9 +11,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 from underwriting_validation.utils.result import Result, Success, Error
-from underwriting_validation.utils.pii_filter import mask_contact_id
-
-logger = logging.getLogger(__name__)
+from underwriting_validation.utils.validation_base import ContractValidationServiceBase
 
 
 class IPValidationDataIn(BaseModel):
@@ -38,23 +36,27 @@ class IPValidationAnalysis:
     signer_ip_address: Optional[str] = None
 
 
-class ContractIPValidationService:
+class ContractIPValidationService(ContractValidationServiceBase):
     """Service for validating IP address-related data."""
     
     def __init__(self):
         """Initialize the IP validation service."""
-        logger.info("ContractIPValidationService initialized")
+        super().__init__("ContractIPValidationService")
+    
+    def get_validation_type(self) -> str:
+        """Return the validation type name."""
+        return "IP"
     
     def validate_ip_addresses(self, sender_ip: Optional[str], signer_ip: Optional[str]) -> IPValidationResult:
         """Validate that sender and signer IP addresses differ."""
-        if not sender_ip or not signer_ip:
+        # Use base class normalization
+        sender_normalized = self.normalize_string_field(sender_ip)
+        signer_normalized = self.normalize_string_field(signer_ip)
+        
+        if not sender_normalized or not signer_normalized:
             return IPValidationResult.MISSING_VALUE
         
-        # Normalize IP addresses by trimming whitespace
-        sender_ip = sender_ip.strip()
-        signer_ip = signer_ip.strip()
-        
-        if sender_ip == signer_ip:
+        if sender_normalized == signer_normalized:
             return IPValidationResult.MISMATCH
         else:
             return IPValidationResult.MATCH
@@ -72,33 +74,31 @@ class ContractIPValidationService:
         Returns:
             Result containing IPValidationAnalysis
         """
-        try:
-            contact_id = ip_data.contact_id
-            sender_ip = ip_data.sender_ip_address
-            signer_ip = ip_data.signer_ip_address
-            
+        def perform_analysis():
             # Perform IP validation
-            ip_check = self.validate_ip_addresses(sender_ip, signer_ip)
+            ip_check = self.validate_ip_addresses(
+                ip_data.sender_ip_address, 
+                ip_data.signer_ip_address
+            )
             
             analysis = IPValidationAnalysis(
                 ip_check=ip_check,
-                sender_ip_address=sender_ip,
-                signer_ip_address=signer_ip
+                sender_ip_address=ip_data.sender_ip_address,
+                signer_ip_address=ip_data.signer_ip_address
             )
             
-            masked_id = mask_contact_id(contact_id)
-            logger.info(f"IP analysis completed for contact {masked_id}: {analysis.ip_check.value}")
-            return Success(analysis)
-            
-        except Exception as e:
-            logger.error(f"Error analyzing IP validity: {e}")
-            return Error(f"Analysis failed: {str(e)}")
+            # Log completion using base class method
+            self.log_analysis_completion(ip_data.contact_id, analysis.ip_check.value)
+            return analysis
+        
+        # Use base class safe execution
+        return self.safe_execute("IP validation analysis", ip_data.contact_id, perform_analysis)
     
     def format_ip_response(self, analysis: IPValidationAnalysis) -> str:
         """Format the IP analysis into a user-friendly response."""
-        if analysis.ip_check == IPValidationResult.MATCH:
-            return f"✅ IP validation passed: Sender and signer IP addresses are different"
-        elif analysis.ip_check == IPValidationResult.MISMATCH:
-            return f"❌ IP validation failed: Sender and signer IP addresses are the same"
-        else:
-            return f"⚠️ IP validation incomplete: Missing IP address data"
+        return self.format_validation_response(
+            analysis.ip_check,
+            "IP validation passed: Sender and signer IP addresses are different",
+            "IP validation failed: Sender and signer IP addresses are the same", 
+            "IP validation incomplete: Missing IP address data"
+        )

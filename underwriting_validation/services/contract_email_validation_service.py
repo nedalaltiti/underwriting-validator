@@ -11,9 +11,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 from underwriting_validation.utils.result import Result, Success, Error
-from underwriting_validation.utils.pii_filter import mask_contact_id
-
-logger = logging.getLogger(__name__)
+from underwriting_validation.utils.validation_base import ContractValidationServiceBase
 
 
 class EmailValidationDataIn(BaseModel):
@@ -38,23 +36,31 @@ class EmailValidationAnalysis:
     contract_email: Optional[str] = None
 
 
-class ContractEmailValidationService:
+class ContractEmailValidationService(ContractValidationServiceBase):
     """Service for validating email-related data."""
     
     def __init__(self):
         """Initialize the email validation service."""
-        logger.info("ContractEmailValidationService initialized")
+        super().__init__("ContractEmailValidationService")
+    
+    def get_validation_type(self) -> str:
+        """Return the validation type name."""
+        return "email"
     
     def validate_email_match(self, forth_email: Optional[str], contract_email: Optional[str]) -> EmailValidationResult:
         """Validate that Forth email matches contract email."""
-        if not forth_email or forth_email == '' or not contract_email or contract_email == '':
+        # Use base class normalization
+        forth_normalized = self.normalize_string_field(forth_email)
+        contract_normalized = self.normalize_string_field(contract_email)
+        
+        if not forth_normalized or not contract_normalized:
             return EmailValidationResult.MISSING_VALUE
         
-        # Normalize emails by trimming whitespace and converting to lowercase
-        forth_email = forth_email.strip().lower()
-        contract_email = contract_email.strip().lower()
+        # Convert to lowercase for comparison
+        forth_lower = forth_normalized.lower()
+        contract_lower = contract_normalized.lower()
         
-        if forth_email == contract_email:
+        if forth_lower == contract_lower:
             return EmailValidationResult.MATCH
         else:
             return EmailValidationResult.MISMATCH
